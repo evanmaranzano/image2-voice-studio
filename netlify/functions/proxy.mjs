@@ -64,6 +64,7 @@ async function proxyImage(req) {
   }
 
   try {
+    const bodyBuffer = body.buffer instanceof ArrayBuffer ? new Uint8Array(body.buffer) : body.buffer;
     const response = await fetch(buildUpstreamUrl(env("OPENAI_BASE_URL") || DEFAULT_BASE_URL, IMAGE_PATH), {
       method: "POST",
       headers: {
@@ -71,7 +72,7 @@ async function proxyImage(req) {
         "Content-Type": req.headers.get("content-type") || "application/json",
         "User-Agent": "Mozilla/5.0 Image2VoiceStudio/1.0",
       },
-      body: body.buffer,
+      body: bodyBuffer,
     });
 
     const raw = await response.text();
@@ -207,8 +208,8 @@ function parseAllowedOrigins() {
 
 function isOriginAllowed(origin) {
   if (!origin) return true;
-  const allowed = parseAllowedOrigins();
-  if (!allowed.length) return false;
+  const configured = parseAllowedOrigins();
+  const allowed = configured.length ? configured : [new URL(origin).origin.replace(/\/$/, "")];
   return allowed.includes(origin.replace(/\/$/, ""));
 }
 

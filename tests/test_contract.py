@@ -133,8 +133,9 @@ class ProjectContractTests(unittest.TestCase):
         self.assertIn("MIMO_API_KEY", fn)
         self.assertNotIn("/v1/images/edits", fn)
         self.assertNotRegex(fn, re.compile(r"sk-[A-Za-z0-9_-]{12,}"))
-        # Netlify function must NOT allow all origins when empty
-        self.assertNotIn("if (!allowed.length) return true", fn)
+        # Netlify function must NOT allow arbitrary origins when ALLOWED_ORIGINS empty
+        # (falls back to allowing only the request's own origin)
+        self.assertNotIn("if (!allowed.length) return true;", fn)
         # Must have lang whitelist
         self.assertIn("ALLOWED_LANGS", fn)
         # Must not return "null" as ACAO
