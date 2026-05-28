@@ -1,0 +1,1406 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Image2 Voice Studio</title>
+  <style>
+    :root {
+      --bg: #ffffff;
+      --bg-2: #f5f5f7;
+      --ink: #1d1d1f;
+      --muted: rgba(29, 29, 31, .52);
+      --line: rgba(0, 0, 0, .08);
+      --glass: rgba(255, 255, 255, .82);
+      --glass-2: rgba(255, 255, 255, .94);
+      --blue: #0071e3;
+      --blue-soft: #2997ff;
+      --green: #34c759;
+      --shadow: 0 10px 30px rgba(0, 0, 0, .045);
+      --shadow-soft: 0 6px 18px rgba(0, 0, 0, .035);
+      --radius: 28px;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+      background: linear-gradient(180deg, #ffffff 0%, #fbfbfd 52%, #f5f5f7 100%);
+      overflow-y: auto;
+      overflow-x: hidden;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background:
+        radial-gradient(circle at 50% -10%, rgba(245, 245, 247, .88), transparent 34%),
+        radial-gradient(circle at 50% 110%, rgba(245, 245, 247, .72), transparent 34%);
+    }
+
+    button, textarea, input, select { font: inherit; }
+    button { border: 0; cursor: pointer; color: inherit; }
+    textarea, input, select { outline: none; }
+
+    .app {
+      position: relative;
+      width: min(1420px, calc(100vw - 34px));
+      min-height: 100vh;
+      margin: 0 auto;
+      padding: 18px 0;
+      display: grid;
+      grid-template-rows: 58px minmax(0, 1fr);
+      gap: 14px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 9px 10px 9px 14px;
+      border-radius: 24px;
+      border: 1px solid rgba(0, 0, 0, .06);
+      background: rgba(255, 255, 255, .78);
+      backdrop-filter: blur(20px) saturate(1.05);
+      -webkit-backdrop-filter: blur(20px) saturate(1.05);
+      box-shadow: var(--shadow-soft);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .logo {
+      width: 40px;
+      height: 40px;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      font-size: 20px;
+      background: #f5f5f7;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .96), 0 4px 12px rgba(0, 0, 0, .04);
+    }
+
+    .title-wrap { min-width: 0; }
+    h1 {
+      margin: 0;
+      font-size: 20px;
+      letter-spacing: -.04em;
+      line-height: 1.08;
+    }
+
+    .subtitle {
+      margin-top: 3px;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 13px;
+      border-radius: 999px;
+      background: rgba(245, 245, 247, .9);
+      border: 1px solid rgba(0, 0, 0, .06);
+      color: rgba(29, 29, 31, .68);
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: var(--green);
+      box-shadow: 0 0 0 4px rgba(52, 199, 89, .12);
+    }
+
+    .workspace {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1.08fr) minmax(360px, .92fr);
+      gap: 14px;
+    }
+
+    .stack {
+      min-height: 0;
+      display: grid;
+      gap: 14px;
+    }
+
+    .left-stack { grid-template-rows: minmax(0, 1fr) minmax(340px, 42vh); }
+    .right-stack { grid-template-rows: auto minmax(0, 1fr); }
+
+    .glass {
+      position: relative;
+      overflow: hidden;
+      border-radius: var(--radius);
+      border: 1px solid rgba(0, 0, 0, .055);
+      background: rgba(255, 255, 255, .76);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(22px) saturate(1.04);
+      -webkit-backdrop-filter: blur(22px) saturate(1.04);
+    }
+
+    .glass::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background: linear-gradient(180deg, rgba(255, 255, 255, .46), transparent 46%);
+      opacity: .68;
+    }
+
+    .panel-content {
+      position: relative;
+      height: 100%;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      padding: 20px 20px 18px;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+
+    .section-title {
+      font-size: 16px;
+      font-weight: 760;
+      letter-spacing: -.03em;
+    }
+
+    .section-note {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 3px;
+    }
+
+    .prompt-box {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      border-radius: 24px;
+      border: 1px solid rgba(0, 0, 0, .06);
+      background: rgba(255, 255, 255, .88);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .98);
+      overflow: hidden;
+    }
+
+    textarea {
+      flex: 1;
+      width: 100%;
+      min-height: 0;
+      resize: none;
+      border: 0;
+      background: transparent;
+      padding: 18px 18px 12px;
+      color: var(--ink);
+      font-size: 17px;
+      line-height: 1.62;
+    }
+
+    textarea::placeholder { color: rgba(24, 34, 48, .33); }
+
+    .prompt-foot {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      border-top: 1px solid rgba(109, 122, 141, .09);
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .btn {
+      height: 38px;
+      padding: 0 14px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .92);
+      border: 1px solid rgba(0, 0, 0, .06);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .98);
+      color: rgba(29, 29, 31, .76);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      white-space: nowrap;
+      transition: transform .16s ease, background .16s ease;
+      font-size: 13px;
+    }
+
+    .btn:hover { transform: translateY(-1px); background: rgba(255, 255, 255, .98); }
+
+    .btn.primary {
+      color: white;
+      background: #0071e3;
+      border-color: transparent;
+      box-shadow: 0 8px 18px rgba(0, 113, 227, .18);
+    }
+
+    .btn.large {
+      height: 48px;
+      font-size: 15px;
+      font-weight: 760;
+      padding: 0 18px;
+    }
+
+    .btn.ghost { color: rgba(24, 34, 48, .55); }
+    .btn.cta {
+      width: 100%;
+      height: 52px;
+      font-size: 16px;
+      letter-spacing: -.01em;
+    }
+    .btn.toggle-btn { min-width: 96px; }
+
+    .input-switcher {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .input-shell {
+      flex: 1;
+      min-height: 0;
+      position: relative;
+    }
+
+    .panel-view {
+      position: absolute;
+      inset: 0;
+      display: none;
+    }
+
+    .panel-view.active { display: block; }
+
+    .micro-area {
+      height: 100%;
+      display: grid;
+      grid-template-columns: 132px minmax(0, 1fr);
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    .mic-button {
+      min-height: 0;
+      border-radius: 28px;
+      background:
+        radial-gradient(circle at 50% 22%, rgba(255, 255, 255, .8), transparent 42%),
+        linear-gradient(180deg, var(--blue), var(--blue-soft));
+      color: white;
+      box-shadow: 0 14px 34px rgba(0, 122, 255, .22);
+      display: grid;
+      place-items: center;
+      text-align: center;
+      transition: transform .2s ease, box-shadow .2s ease, filter .2s ease;
+    }
+
+    .mic-button:hover { transform: translateY(-2px); box-shadow: 0 18px 40px rgba(0, 122, 255, .28); }
+    .mic-button.listening { animation: pulse 1.2s ease-in-out infinite; filter: saturate(1.1); }
+
+    @keyframes pulse {
+      0%, 100% { transform: scale(1); }
+      50% { transform: scale(1.02); }
+    }
+
+    .mic-icon {
+      font-size: 34px;
+      line-height: 1;
+    }
+
+    .mic-label {
+      margin-top: 8px;
+      font-weight: 780;
+      letter-spacing: -.02em;
+    }
+
+    .voice-card {
+      min-width: 0;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      border-radius: 24px;
+      border: 1px solid rgba(0, 0, 0, .06);
+      background: rgba(255, 255, 255, .86);
+      padding: 10px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .96);
+    }
+
+    .voice-line {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .select, .input {
+      min-width: 0;
+      height: 38px;
+      width: 100%;
+      border-radius: 14px;
+      border: 1px solid rgba(221, 227, 235, .98);
+      background: rgba(255, 255, 255, .92);
+      padding: 0 11px;
+      color: rgba(29, 29, 31, .76);
+    }
+
+    .voice-line .select,
+    .voice-line .input { flex: 1; }
+
+    .transcript {
+      flex: 1;
+      min-height: 34px;
+      border-radius: 16px;
+      border: 1px dashed rgba(0, 113, 227, .16);
+      background: rgba(245, 245, 247, .78);
+      padding: 10px 12px;
+      color: rgba(24, 34, 48, .66);
+      font-size: 13px;
+      line-height: 1.45;
+      overflow: auto;
+    }
+
+    .virtual-keyboard {
+      height: 100%;
+      min-height: 0;
+      border-radius: 22px;
+      border: 1px solid rgba(0, 0, 0, .06);
+      background: rgba(255, 255, 255, .86);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .98);
+      padding: 10px;
+      display: grid;
+      grid-template-rows: 38px repeat(4, minmax(38px, 1fr));
+      gap: 6px;
+      overflow: hidden;
+    }
+
+    .ime-bar {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: 116px minmax(0, 1fr);
+      gap: 8px;
+      align-items: center;
+    }
+
+    .pinyin-readout {
+      height: 36px;
+      border-radius: 13px;
+      background: rgba(245, 245, 247, .92);
+      border: 1px solid rgba(0, 0, 0, .06);
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      color: rgba(24, 34, 48, .72);
+      font-size: 13px;
+      font-weight: 650;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .candidate-list {
+      min-width: 0;
+      display: flex;
+      gap: 6px;
+      overflow: auto;
+      align-items: center;
+    }
+
+    .candidate {
+      height: 34px;
+      min-width: 42px;
+      padding: 0 11px;
+      border-radius: 13px;
+      background: rgba(255, 255, 255, .96);
+      border: 1px solid rgba(0, 0, 0, .06);
+      color: rgba(29, 29, 31, .76);
+      font-size: 13px;
+      font-weight: 650;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .98);
+      white-space: nowrap;
+    }
+
+    .candidate.primary {
+      color: var(--blue);
+      background: rgba(0, 122, 255, .07);
+      border-color: rgba(0, 122, 255, .12);
+    }
+
+    .kbd-row {
+      display: flex;
+      gap: 6px;
+      min-height: 0;
+      align-items: stretch;
+    }
+
+    .kbd-row .vk-key { flex: 1; }
+    .kbd-row.r2 { padding: 0 5%; }
+    .kbd-row.r3 { padding: 0 13%; }
+    .kbd-row.r4 .vk-key:nth-child(1) { flex: 1.5; }
+    .kbd-row.r4 .vk-key:nth-child(2) { flex: 1.2; }
+    .kbd-row.r4 .vk-key:nth-child(3) { flex: 3; }
+    .kbd-row.r4 .vk-key:nth-child(4) { flex: 1; }
+    .kbd-row.r4 .vk-key:nth-child(5) { flex: 1.5; }
+
+    .vk-key {
+      min-width: 0;
+      min-height: 36px;
+      border-radius: 14px;
+      background: rgba(255, 255, 255, .96);
+      border: 1px solid rgba(0, 0, 0, .06);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .98), 0 4px 10px rgba(0, 0, 0, .035);
+      color: rgba(29, 29, 31, .72);
+      font-size: 14px;
+      font-weight: 650;
+      transition: transform .16s ease, background .16s ease;
+    }
+
+    .vk-key:hover { transform: translateY(-1px); background: #fff; }
+    .vk-key.wide { font-size: 13px; }
+    .vk-key.action {
+      color: var(--blue);
+      background: rgba(0, 113, 227, .06);
+      border-color: rgba(0, 113, 227, .12);
+    }
+
+    .options-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      align-items: end;
+    }
+
+    .options-grid-simple { margin-top: 2px; }
+    .advanced-grid { margin-top: 10px; }
+    .field { min-width: 0; }
+
+    .label {
+      display: block;
+      margin: 0 0 6px 2px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .toggles {
+      display: grid;
+      gap: 8px;
+      margin-top: 8px;
+    }
+
+    .toggle {
+      min-height: 46px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 18px;
+      border: 1px solid rgba(0, 0, 0, .06);
+      background: rgba(255, 255, 255, .86);
+      color: rgba(24, 34, 48, .76);
+      font-size: 13px;
+    }
+
+    .switch {
+      width: 44px;
+      height: 26px;
+      flex: 0 0 auto;
+      border-radius: 999px;
+      background: #cfd5dc;
+      position: relative;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .22);
+      transition: background .18s ease;
+    }
+
+    .switch::after {
+      content: "";
+      position: absolute;
+      top: 3px;
+      left: 3px;
+      width: 20px;
+      height: 20px;
+      border-radius: 999px;
+      background: #fff;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, .14);
+      transition: transform .18s ease;
+    }
+
+    .switch.active {
+      background: #0071e3;
+    }
+
+    .switch.active::after {
+      transform: translateX(18px);
+    }
+
+    .mode-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .mode-btn {
+      min-height: 40px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, .86);
+      border: 1px solid rgba(0, 0, 0, .06);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, .98);
+      color: rgba(24, 34, 48, .58);
+      font-size: 13px;
+      font-weight: 650;
+      transition: transform .16s ease, background .16s ease, color .16s ease;
+    }
+
+    .mode-btn.active {
+      color: white;
+      background: #0071e3;
+      border-color: transparent;
+      box-shadow: 0 8px 18px rgba(0, 113, 227, .18);
+    }
+
+    .generate-row {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 9px;
+      margin-top: 14px;
+      padding-top: 4px;
+    }
+
+    .preview {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      place-items: center;
+      border-radius: 24px;
+      overflow: hidden;
+      position: relative;
+      border: 1px solid rgba(0, 0, 0, .06);
+      background:
+        radial-gradient(circle at 18% 18%, rgba(246, 248, 251, .95), transparent 34%),
+        linear-gradient(180deg, rgba(255, 255, 255, .92), rgba(248, 250, 253, .84));
+    }
+
+    .empty {
+      text-align: center;
+      padding: 26px;
+      color: rgba(24, 34, 48, .56);
+    }
+
+    .empty .orb {
+      width: 92px;
+      height: 92px;
+      margin: 0 auto 14px;
+      border-radius: 30px;
+      background:
+        radial-gradient(circle at 35% 25%, rgba(255, 255, 255, .98), transparent 26%),
+        linear-gradient(180deg, #7bc8ff, #4aa8ff 70%, #87d6ff);
+      box-shadow: 0 16px 34px rgba(0, 122, 255, .18);
+      display: grid;
+      place-items: center;
+      color: white;
+      font-size: 38px;
+    }
+
+    .empty strong {
+      display: block;
+      color: rgba(24, 34, 48, .84);
+      font-size: 18px;
+      margin-bottom: 6px;
+    }
+
+    .empty p {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.52;
+    }
+
+    .result-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: none;
+    }
+
+    .result-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 20px;
+      transform: translateX(-50%) translateY(20px);
+      opacity: 0;
+      pointer-events: none;
+      z-index: 50;
+      padding: 11px 15px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, .92);
+      border: 1px solid rgba(221, 227, 235, .98);
+      box-shadow: var(--shadow-soft);
+      color: rgba(29, 29, 31, .76);
+      transition: .2s ease;
+      font-size: 13px;
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+    }
+
+    .toast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+
+    .loading {
+      position: absolute;
+      inset: 0;
+      display: none;
+      place-items: center;
+      background: rgba(255, 255, 255, .72);
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      color: rgba(24, 34, 48, .68);
+      font-weight: 650;
+      text-align: center;
+    }
+
+    .loading.show { display: grid; }
+
+    .spinner {
+      width: 34px;
+      height: 34px;
+      border-radius: 50%;
+      border: 3px solid rgba(0, 122, 255, .12);
+      border-top-color: var(--blue);
+      animation: spin .85s linear infinite;
+      margin: 0 auto 10px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    @media (max-width: 980px) {
+      body { overflow: auto; }
+      .app { height: auto; min-height: 100vh; grid-template-rows: auto auto; }
+      .workspace { grid-template-columns: 1fr; }
+      .left-stack, .right-stack { grid-template-rows: auto; }
+      .prompt-box { min-height: 280px; }
+      .micro-area { grid-template-columns: 1fr; }
+      .topbar { align-items: flex-start; }
+      .status-pill { display: none; }
+      .preview { min-height: 430px; }
+      .virtual-keyboard { min-height: 250px; }
+    }
+
+    @media (max-width: 720px) {
+      .app { width: min(100vw - 22px, 1420px); padding-top: 12px; }
+      .topbar { flex-direction: column; align-items: flex-start; }
+      .options-grid, .advanced-grid, .mode-row { grid-template-columns: 1fr; }
+      .kbd-row.r2, .kbd-row.r3 { padding: 0; }
+      .candidate-list { flex-wrap: nowrap; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo">✦</div>
+        <div class="title-wrap">
+          <h1>Image2 Voice Studio</h1>
+          <div class="subtitle">Text to Image</div>
+        </div>
+      </div>
+      <div class="status-pill" id="statusPill"><span class="dot"></span><span id="statusText">Live Mode · gpt-image-2</span></div>
+    </header>
+
+    <main class="workspace">
+      <section class="stack left-stack">
+        <div class="glass">
+          <div class="panel-content">
+            <div class="section-head">
+              <div>
+                <div class="section-title">画面描述</div>
+                <div class="section-note">支持直接输入、浏览器语音输入，以及中文拼音虚拟键盘输入。</div>
+              </div>
+              <button class="btn ghost" id="clearBtn" type="button">清空</button>
+            </div>
+            <div class="prompt-box">
+              <textarea id="prompt" maxlength="4000" placeholder="例如：纯白苹果风 AI 生图页面，中心是发光麦克风入口，右侧是简洁生图选项，留白充足，界面通透、安静、干净。"></textarea>
+              <div class="prompt-foot">
+                <span id="count">0 字</span>
+                <span>⌘ / Ctrl + Enter 开始生图</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="glass">
+          <div class="panel-content">
+            <div class="input-switcher">
+              <div class="section-head">
+                <div>
+                  <div class="section-title" id="inputModeTitle">语音输入</div>
+                  <div class="section-note" id="inputModeNote">点击麦克风说出画面内容，或切换到虚拟键盘输入。</div>
+                </div>
+                <button class="btn toggle-btn" id="toggleInputBtn" type="button">打开键盘</button>
+              </div>
+
+              <div class="input-shell">
+                <div class="panel-view active" id="voicePanel">
+                  <div class="micro-area">
+                    <button class="mic-button" id="micBtn" type="button" aria-label="开始或停止浏览器语音识别">
+                      <div>
+                        <div class="mic-icon">🎙️</div>
+                        <div class="mic-label" id="micLabel">开始语音</div>
+                      </div>
+                    </button>
+                    <div class="voice-card">
+                      <div class="voice-line">
+                        <select class="select" id="voiceLang" aria-label="语音语言">
+                          <option value="zh-CN">中文普通话</option>
+                          <option value="en-US">English</option>
+                          <option value="ja-JP">日本語</option>
+                        </select>
+                        <select class="select" id="voiceMode" aria-label="语音写入模式">
+                          <option value="append">追加到描述</option>
+                          <option value="replace">替换描述</option>
+                        </select>
+                      </div>
+                      <div class="transcript" id="transcript">语音识别结果会显示在这里。若浏览器不支持，可改用 MiMo 录音转写或切换到虚拟键盘。</div>
+                      <div class="voice-line">
+                        <button class="btn" id="sampleBtn" type="button">填入示例</button>
+                        <button class="btn" id="mimoButton" type="button">MiMo 录音转写</button>
+                        <button class="btn" id="switchToKeyboardBtn" type="button">使用虚拟键盘</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="panel-view" id="keyboardPanel">
+                  <div class="virtual-keyboard" aria-label="中文拼音虚拟键盘">
+                    <div class="ime-bar">
+                      <div class="pinyin-readout" id="pinyinReadout">拼音输入</div>
+                      <div class="candidate-list" id="candidateList"></div>
+                    </div>
+                    <div class="kbd-row r1" data-row="qwertyuiop"></div>
+                    <div class="kbd-row r2" data-row="asdfghjkl"></div>
+                    <div class="kbd-row r3" data-row="zxcvbnm"></div>
+                    <div class="kbd-row r4">
+                      <button class="vk-key wide action" data-action="clearPinyin" type="button">清拼音</button>
+                      <button class="vk-key wide" data-action="backspace" type="button">退格</button>
+                      <button class="vk-key wide action" data-action="space" type="button">空格/选词</button>
+                      <button class="vk-key wide" data-action="punct" type="button">，</button>
+                      <button class="vk-key wide action" data-action="enter" type="button">换行</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="stack right-stack">
+        <div class="glass">
+          <div class="panel-content">
+            <div class="section-head">
+              <div>
+                <div class="section-title">生图选项</div>
+                <div class="section-note">主界面只保留必要参数，高级配置收进次级区。</div>
+              </div>
+            </div>
+
+            <div class="options-grid options-grid-simple">
+              <label class="field">
+                <span class="label">比例</span>
+                <select class="select" id="size">
+                  <option value="1536x1024">3:2 横图</option>
+                  <option value="1024x1024">1:1 方图</option>
+                  <option value="1024x1536">2:3 竖图</option>
+                  <option value="1920x1080">16:9 封面</option>
+                </select>
+              </label>
+              <label class="field">
+                <span class="label">质量</span>
+                <select class="select" id="quality">
+                  <option value="high">高质量</option>
+                  <option value="medium">标准</option>
+                  <option value="low">快速</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="toggles">
+              <div class="toggle">
+                <span>自动增强画质与构图</span>
+                <button class="switch active" id="autoEnhance" type="button" aria-label="切换自动增强画质与构图"></button>
+              </div>
+            </div>
+
+            <div class="options-grid advanced-grid">
+              <label class="field">
+                <span class="label">API Base</span>
+                <input class="input" id="apiBase" value="" placeholder="留空表示走当前站点代理" />
+              </label>
+              <label class="field">
+                <span class="label">模型</span>
+                <input class="input" id="model" value="gpt-image-2" />
+              </label>
+              <label class="field">
+                <span class="label">输出格式</span>
+                <select class="select" id="responseFormat">
+                  <option value="url">url</option>
+                  <option value="b64_json">b64_json</option>
+                </select>
+              </label>
+              <label class="field">
+                <span class="label">说明</span>
+                <input class="input" id="runHint" value="默认走当前站点代理 /v1/images/generations" readonly />
+              </label>
+            </div>
+
+            <div class="generate-row">
+              <button class="btn primary large cta" id="generateBtn" type="button">开始生图 ✨</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="glass">
+          <div class="panel-content">
+            <div class="section-head">
+              <div>
+                <div class="section-title">预览</div>
+                <div class="section-note" id="resultNote">等待真实接口返回结果。</div>
+              </div>
+              <button class="btn" id="downloadBtn" type="button">下载</button>
+            </div>
+            <div class="preview" id="preview">
+              <div class="empty" id="emptyState">
+                <div class="orb">🖼️</div>
+                <strong>等待生成</strong>
+                <p>输入画面描述，选择参数，然后点击“开始生图”。</p>
+              </div>
+              <img class="result-img" id="resultImg" alt="生成结果预览" />
+              <div class="loading" id="loading">
+                <div>
+                  <div class="spinner"></div>
+                  <div id="loadingText">正在生成预览...</div>
+                </div>
+              </div>
+            </div>
+            <div class="result-bar">
+              <span id="meta">Text to Image · Demo Preview</span>
+              <span id="time">Ready</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    const $ = (q) => document.querySelector(q);
+    const $$ = (q) => [...document.querySelectorAll(q)];
+
+    const promptEl = $("#prompt");
+    const toast = $("#toast");
+    const transcript = $("#transcript");
+    const micBtn = $("#micBtn");
+    const micLabel = $("#micLabel");
+    const loading = $("#loading");
+    const resultImg = $("#resultImg");
+    const emptyState = $("#emptyState");
+    const voicePanel = $("#voicePanel");
+    const keyboardPanel = $("#keyboardPanel");
+    const toggleInputBtn = $("#toggleInputBtn");
+    const inputModeTitle = $("#inputModeTitle");
+    const inputModeNote = $("#inputModeNote");
+
+    let recognition = null;
+    let listening = false;
+    let generatedUrl = "";
+    let pinyinBuffer = "";
+    let keyboardOpen = false;
+    let mediaRecorder = null;
+    let isMimoRecording = false;
+    let audioChunks = [];
+
+    const pinyinDict = {
+      ni: ["你", "拟", "逆"], hao: ["好", "号", "浩"], ma: ["吗", "码", "马"],
+      wo: ["我", "握", "窝"], men: ["们", "门"], shi: ["是", "时", "式"],
+      yi: ["一", "已", "艺"], ge: ["个", "格", "歌"], tu: ["图", "兔"],
+      pian: ["片", "篇"], sheng: ["生", "声"], cheng: ["成", "城"],
+      hua: ["画", "华"], mian: ["面", "眠"], jian: ["简", "界", "键"],
+      jie: ["洁", "界"], bai: ["白", "百"], ping: ["屏", "平"],
+      mu: ["幕", "目"], ke: ["克", "可"], ji: ["机", "极", "级"],
+      tong: ["通", "同"], tou: ["透", "头"], gao: ["高", "稿"],
+      chan: ["产"], pin: ["品"], yin: ["音"], yu: ["语", "域"],
+      liu: ["留", "流"], guang: ["光"], gan: ["感"], an: ["安"],
+      jing: ["静", "净"], wen: ["文", "稳"], shui: ["水"], feng: ["风"],
+      apple: ["Apple"], pingguo: ["苹果"], maikefeng: ["麦克风"], ye: ["页"],
+      mianban: ["面板"], xuanxiang: ["选项"], gaoji: ["高级"], tongtou: ["通透"],
+      ganjing: ["干净"], shengtu: ["生图"], yuyin: ["语音"], shuru: ["输入"],
+      jiemian: ["界面"], pingtai: ["平台"], guangying: ["光影"], baise: ["白色"],
+      boli: ["玻璃"], qingliang: ["清亮"], jianjie: ["简洁"], gaoji: ["高级"]
+    };
+
+    const showToast = (text) => {
+      toast.textContent = text;
+      toast.classList.add("show");
+      clearTimeout(showToast.timer);
+      showToast.timer = setTimeout(() => toast.classList.remove("show"), 1800);
+    };
+
+    const updateCount = () => {
+      $("#count").textContent = `${promptEl.value.trim().length} 字`;
+    };
+
+    promptEl.addEventListener("input", updateCount);
+
+    function insertAtCursor(text) {
+      const start = promptEl.selectionStart ?? promptEl.value.length;
+      const end = promptEl.selectionEnd ?? promptEl.value.length;
+      promptEl.value = promptEl.value.slice(0, start) + text + promptEl.value.slice(end);
+      const pos = start + text.length;
+      promptEl.setSelectionRange(pos, pos);
+      updateCount();
+      promptEl.focus();
+    }
+
+    function addText(text) {
+      const cleaned = String(text || "").trim();
+      if (!cleaned) return;
+      if ($("#voiceMode").value === "replace") {
+        promptEl.value = cleaned;
+        updateCount();
+        promptEl.focus();
+        return;
+      }
+      const current = promptEl.value.trim();
+      promptEl.value = current ? `${current}，${cleaned}` : cleaned;
+      updateCount();
+      promptEl.focus();
+    }
+
+    function getCandidates() {
+      if (!pinyinBuffer) return ["语音", "生图", "界面", "留白", "高级"];
+      const exact = pinyinDict[pinyinBuffer] || [];
+      const fuzzy = Object.entries(pinyinDict)
+        .filter(([key]) => key.startsWith(pinyinBuffer) && key !== pinyinBuffer)
+        .flatMap(([, values]) => values.slice(0, 1));
+      return [...new Set([...exact, ...fuzzy, pinyinBuffer])].slice(0, 6);
+    }
+
+    function renderCandidates() {
+      $("#pinyinReadout").textContent = pinyinBuffer || "拼音输入";
+      const list = $("#candidateList");
+      list.innerHTML = "";
+      getCandidates().forEach((word, index) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = `candidate${index === 0 ? " primary" : ""}`;
+        btn.textContent = word;
+        btn.onclick = () => {
+          insertAtCursor(word);
+          pinyinBuffer = "";
+          renderCandidates();
+        };
+        list.appendChild(btn);
+      });
+    }
+
+    function removeBackward() {
+      const start = promptEl.selectionStart ?? promptEl.value.length;
+      const end = promptEl.selectionEnd ?? promptEl.value.length;
+      if (start !== end) {
+        promptEl.value = promptEl.value.slice(0, start) + promptEl.value.slice(end);
+        promptEl.setSelectionRange(start, start);
+      } else if (start > 0) {
+        promptEl.value = promptEl.value.slice(0, start - 1) + promptEl.value.slice(start);
+        promptEl.setSelectionRange(start - 1, start - 1);
+      }
+      updateCount();
+      promptEl.focus();
+    }
+
+    function handleKeyboardAction(action) {
+      if (action === "clearPinyin") {
+        pinyinBuffer = "";
+      } else if (action === "backspace") {
+        if (pinyinBuffer) pinyinBuffer = pinyinBuffer.slice(0, -1);
+        else removeBackward();
+      } else if (action === "space") {
+        if (pinyinBuffer) {
+          insertAtCursor(getCandidates()[0]);
+          pinyinBuffer = "";
+        } else {
+          insertAtCursor(" ");
+        }
+      } else if (action === "punct") {
+        insertAtCursor("，");
+      } else if (action === "enter") {
+        if (pinyinBuffer) {
+          insertAtCursor(getCandidates()[0]);
+          pinyinBuffer = "";
+        }
+        insertAtCursor("\n");
+      }
+      renderCandidates();
+    }
+
+    document.querySelectorAll(".kbd-row[data-row]").forEach((row) => {
+      row.dataset.row.split("").forEach((letter) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "vk-key";
+        btn.textContent = letter;
+        btn.onclick = () => {
+          pinyinBuffer += letter;
+          renderCandidates();
+        };
+        row.appendChild(btn);
+      });
+    });
+
+    document.querySelector(".virtual-keyboard").addEventListener("click", (event) => {
+      const action = event.target?.dataset?.action;
+      if (action) handleKeyboardAction(action);
+    });
+
+    function setInputMode(mode) {
+      keyboardOpen = mode === "keyboard";
+      voicePanel.classList.toggle("active", !keyboardOpen);
+      keyboardPanel.classList.toggle("active", keyboardOpen);
+      toggleInputBtn.textContent = keyboardOpen ? "收起键盘" : "打开键盘";
+      inputModeTitle.textContent = keyboardOpen ? "虚拟键盘" : "语音输入";
+      inputModeNote.textContent = keyboardOpen
+        ? "当前使用中文拼音键盘输入，点候选词上屏，空格默认选第一个。"
+        : "点击麦克风说出画面内容，或切换到虚拟键盘输入。";
+    }
+
+    toggleInputBtn.onclick = () => setInputMode(keyboardOpen ? "voice" : "keyboard");
+    $("#switchToKeyboardBtn").onclick = () => setInputMode("keyboard");
+
+    function enhancePrompt(text) {
+      const base = String(text || "").trim();
+      if (!base) return "";
+      const suffix = "，极简构图，纯白通透界面，柔和光感，大面积留白，精致阴影，高清细节，商业级产品视觉，无文字，无水印，无杂乱背景";
+      return base.includes("高清细节") ? base : `${base}${suffix}`;
+    }
+
+    function buildPrompt() {
+      const raw = promptEl.value.trim();
+      if (!raw) return "";
+      return $("#autoEnhance").classList.contains("active") ? enhancePrompt(raw) : raw;
+    }
+
+    $("#sampleBtn").onclick = () => {
+      promptEl.value = "纯白苹果风 AI 生图页面，中心是发光麦克风入口，右侧是简洁生图选项，留白充足，界面通透安静，高级产品视觉。";
+      updateCount();
+      showToast("已填入示例");
+    };
+
+    $("#clearBtn").onclick = () => {
+      promptEl.value = "";
+      pinyinBuffer = "";
+      transcript.textContent = "语音识别结果会显示在这里。若浏览器不支持，可改用 MiMo 录音转写或切换到虚拟键盘。";
+      renderCandidates();
+      updateCount();
+      showToast("已清空");
+    };
+
+    $("#autoEnhance").onclick = () => $("#autoEnhance").classList.toggle("active");
+
+    function escapeXml(text) {
+      return String(text).replace(/[&<>'"]/g, (char) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        "'": "&apos;",
+        "\"": "&quot;",
+      }[char]));
+    }
+
+    async function readApiError(response) {
+      const text = await response.text();
+      try {
+        const parsed = JSON.parse(text);
+        return parsed.error || `接口错误：${response.status}`;
+      } catch {
+        return `接口错误：${response.status} ${text.slice(0, 240)}`;
+      }
+    }
+
+    function defaultApiBase() {
+      const origin = window.location.origin.replace(/\/$/, "");
+      if (/^https?:\/\/127\.0\.0\.1(?::\d+)?$/i.test(origin) || /^https?:\/\/localhost(?::\d+)?$/i.test(origin)) {
+        return origin;
+      }
+      return `${origin}/.netlify/functions/proxy`;
+    }
+
+    function getApiBase() {
+      return ($("#apiBase").value.trim() || defaultApiBase()).replace(/\/$/, "");
+    }
+
+    function resolveEndpoint(path) {
+      const base = getApiBase();
+      const isNetlifyProxyBase = /\/\.netlify\/functions\/proxy$/i.test(base);
+      if (!isNetlifyProxyBase) return `${base}${path}`;
+      if (path === "/config") return `${base}?route=config`;
+      if (path === "/healthz") return `${base}?route=healthz`;
+      if (path === "/v1/images/generations") return `${base}?route=generate`;
+      if (path === "/stt/transcribe") return `${base}?route=transcribe`;
+      return `${base}${path}`;
+    }
+
+    async function callLiveApi(finalPrompt) {
+      const base = getApiBase();
+      const model = $("#model").value.trim() || "gpt-image-2";
+      const response = await fetch(resolveEndpoint("/v1/images/generations"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model,
+          prompt: finalPrompt,
+          size: $("#size").value,
+          quality: $("#quality").value,
+          response_format: $("#responseFormat").value,
+          n: 1,
+        }),
+      });
+      if (!response.ok) throw new Error(await readApiError(response));
+      const data = await response.json();
+      const direct = data?.data?.[0]?.url || data?.url || data?.image_url;
+      if (direct) return direct;
+      const b64 = data?.data?.[0]?.b64_json;
+      if (b64) return `data:image/png;base64,${b64}`;
+      throw new Error("没有在响应中找到图片 URL。");
+    }
+
+    async function loadServerConfig() {
+      try {
+        const base = getApiBase();
+        if (base && base !== window.location.origin && !/^https?:\/\/127\.0\.0\.1(?::\d+)?$/i.test(base) && !/^https?:\/\/localhost(?::\d+)?$/i.test(base)) {
+          return;
+        }
+        const response = await fetch(resolveEndpoint("/config"), { headers: { Accept: "application/json" } });
+        if (!response.ok) return;
+        const config = await response.json();
+        if (config.model) $("#model").value = config.model;
+      } catch {
+        // 静态托管场景下允许 /config 不存在。
+      }
+    }
+
+    function blobToDataUrl(blob) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(new Error("无法读取录音数据"));
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    async function transcribeWithMimo(blob) {
+      const audioData = await blobToDataUrl(blob);
+      const base = getApiBase();
+      const response = await fetch(resolveEndpoint("/stt/transcribe"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ audioData, lang: $("#voiceLang").value }),
+      });
+      if (!response.ok) throw new Error(await readApiError(response));
+      const data = await response.json();
+      const text = String(data.text || "").trim();
+      if (!text) throw new Error("MiMo 没有返回转写文本");
+      return text;
+    }
+
+    async function generate() {
+      const finalPrompt = buildPrompt();
+      if (!finalPrompt) {
+        showToast("先输入画面描述");
+        return;
+      }
+      loading.classList.add("show");
+      $("#loadingText").textContent = "正在调用真实接口...";
+      $("#time").textContent = "Generating...";
+      try {
+        const url = await callLiveApi(finalPrompt);
+        $("#resultNote").textContent = "真实接口返回结果。";
+        generatedUrl = url;
+        resultImg.src = url;
+        resultImg.style.display = "block";
+        emptyState.style.display = "none";
+        $("#meta").textContent = `Live Output · ${$("#size").value} · ${$("#quality").value}`;
+        $("#time").textContent = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+        showToast("真实接口返回成功");
+      } catch (error) {
+        $("#resultNote").textContent = error.message || "生成失败";
+        $("#time").textContent = "Error";
+        showToast(error.message || "生成失败");
+      } finally {
+        loading.classList.remove("show");
+      }
+    }
+
+    $("#generateBtn").onclick = generate;
+    document.addEventListener("keydown", (event) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") generate();
+    });
+
+    $("#downloadBtn").onclick = () => {
+      if (!generatedUrl) {
+        showToast("还没有生成结果");
+        return;
+      }
+      const link = document.createElement("a");
+      link.href = generatedUrl;
+      link.download = generatedUrl.startsWith("data:image/svg") ? "image2-voice-demo.svg" : `image2-${Date.now()}.png`;
+      link.click();
+    };
+
+    function setupSpeech() {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        transcript.textContent = "当前浏览器不支持 Web Speech API。建议用 Chrome / Edge，或改用 MiMo 录音转写。";
+        return false;
+      }
+      recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = $("#voiceLang").value;
+      recognition.onstart = () => {
+        listening = true;
+        micBtn.classList.add("listening");
+        micLabel.textContent = "正在聆听";
+        transcript.textContent = "请开始说话...";
+      };
+      recognition.onresult = (event) => {
+        let interim = "";
+        let finalText = "";
+        for (let i = event.resultIndex; i < event.results.length; i += 1) {
+          const text = event.results[i][0].transcript;
+          if (event.results[i].isFinal) finalText += text;
+          else interim += text;
+        }
+        transcript.textContent = finalText || interim || "正在识别...";
+        if (finalText) addText(finalText.trim());
+      };
+      recognition.onerror = (event) => {
+        showToast(`语音识别失败：${event.error || "unknown"}`);
+      };
+      recognition.onend = () => {
+        listening = false;
+        micBtn.classList.remove("listening");
+        micLabel.textContent = "开始语音";
+      };
+      return true;
+    }
+
+    micBtn.onclick = () => {
+      if (!recognition && !setupSpeech()) {
+        showToast("浏览器不支持语音识别");
+        return;
+      }
+      recognition.lang = $("#voiceLang").value;
+      if (listening) recognition.stop();
+      else recognition.start();
+    };
+
+    $("#voiceLang").onchange = () => {
+      if (recognition) recognition.lang = $("#voiceLang").value;
+    };
+
+    async function toggleMimoRecording() {
+      if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
+        showToast("当前浏览器不支持录音 API");
+        return;
+      }
+      const button = $("#mimoButton");
+      if (isMimoRecording && mediaRecorder) {
+        mediaRecorder.stop();
+        return;
+      }
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioChunks = [];
+        mediaRecorder = new MediaRecorder(stream);
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data?.size) audioChunks.push(event.data);
+        };
+        mediaRecorder.onstop = async () => {
+          isMimoRecording = false;
+          button.textContent = "MiMo 录音转写";
+          micBtn.classList.remove("listening");
+          micLabel.textContent = "开始语音";
+          stream.getTracks().forEach((track) => track.stop());
+          const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || "audio/webm" });
+          if (!blob.size) {
+            showToast("没有录到音频");
+            return;
+          }
+          transcript.textContent = "MiMo 正在转写录音...";
+          try {
+            const text = await transcribeWithMimo(blob);
+            transcript.textContent = text;
+            addText(text);
+            showToast("MiMo 转写完成");
+          } catch (error) {
+            transcript.textContent = error.message || "MiMo 转写失败";
+            showToast(error.message || "MiMo 转写失败");
+          }
+        };
+        mediaRecorder.start();
+        isMimoRecording = true;
+        button.textContent = "停止并转写";
+        micBtn.classList.add("listening");
+        micLabel.textContent = "MiMo 录音中";
+        transcript.textContent = "正在录音，点击“停止并转写”后发送到 MiMo。";
+      } catch (error) {
+        showToast(error?.name === "NotAllowedError" ? "浏览器未允许麦克风权限" : "无法启动录音");
+      }
+    }
+
+    $("#mimoButton").onclick = toggleMimoRecording;
+
+    updateCount();
+    renderCandidates();
+    setInputMode("voice");
+    loadServerConfig();
+  </script>
+</body>
+</html>
