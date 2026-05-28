@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Image2 Voice Studio</title>
+  <title>AI 画图工坊</title>
   <style>
     :root {
       --bg: #ffffff;
@@ -231,7 +231,7 @@
     }
 
     .btn {
-      height: 38px;
+      height: 44px;
       padding: 0 14px;
       border-radius: 999px;
       background: rgba(255, 255, 255, .92);
@@ -266,11 +266,25 @@
     .btn.ghost { color: rgba(24, 34, 48, .55); }
     .btn.cta {
       width: 100%;
-      height: 52px;
+      height: 56px;
       font-size: 16px;
       letter-spacing: -.01em;
     }
     .btn.toggle-btn { min-width: 96px; }
+    .btn.preset-tag {
+      height: 36px;
+      font-size: 13px;
+      padding: 0 14px;
+      border-radius: 999px;
+      background: rgba(0, 113, 227, .06);
+      border-color: rgba(0, 113, 227, .15);
+      color: var(--blue);
+      font-weight: 600;
+    }
+    .btn.preset-tag:hover {
+      background: rgba(0, 113, 227, .12);
+      transform: translateY(-1px);
+    }
 
     .input-switcher {
       flex: 1;
@@ -357,7 +371,7 @@
 
     .select, .input {
       min-width: 0;
-      height: 38px;
+      height: 44px;
       width: 100%;
       border-radius: 14px;
       border: 1px solid rgba(221, 227, 235, .98);
@@ -466,7 +480,7 @@
 
     .vk-key {
       min-width: 0;
-      min-height: 36px;
+      min-height: 44px;
       border-radius: 14px;
       background: rgba(255, 255, 255, .96);
       border: 1px solid rgba(0, 0, 0, .06);
@@ -736,11 +750,12 @@
       <div class="brand">
         <div class="logo">✦</div>
         <div class="title-wrap">
-          <h1>Image2 Voice Studio</h1>
-          <div class="subtitle">Text to Image</div>
+          <h1>AI 画图工坊</h1>
+          <div class="subtitle">用文字或语音描述，AI 帮你画出来</div>
         </div>
       </div>
-      <div class="status-pill" id="statusPill"><span class="dot"></span><span id="statusText">Live Mode · gpt-image-2</span></div>
+      <div class="status-pill" id="statusPill"><span class="dot"></span><span id="statusText">在线 · gpt-image-2</span></div>
+      <button class="btn ghost" id="resetBtn" type="button" style="margin-left:8px;min-width:auto;padding:0 10px;font-size:12px;">重置</button>
     </header>
 
     <main class="workspace">
@@ -750,7 +765,7 @@
             <div class="section-head">
               <div>
                 <div class="section-title">画面描述</div>
-                <div class="section-note">支持直接输入、浏览器语音输入，以及中文拼音虚拟键盘输入。</div>
+                <div class="section-note">支持直接输入、语音输入或点击预设示例。</div>
               </div>
               <button class="btn ghost" id="clearBtn" type="button">清空</button>
             </div>
@@ -758,7 +773,7 @@
               <textarea id="prompt" maxlength="4000" placeholder="例如：纯白苹果风 AI 生图页面，中心是发光麦克风入口，右侧是简洁生图选项，留白充足，界面通透、安静、干净。"></textarea>
               <div class="prompt-foot">
                 <span id="count">0 字</span>
-                <span>⌘ / Ctrl + Enter 开始生图</span>
+                <span id="shortcutHint">⌘ / Ctrl + Enter 开始生图</span>
               </div>
             </div>
           </div>
@@ -836,7 +851,6 @@
             <div class="section-head">
               <div>
                 <div class="section-title">生图选项</div>
-                <div class="section-note">主界面只保留必要参数，高级配置收进次级区。</div>
               </div>
             </div>
 
@@ -905,10 +919,17 @@
               <button class="btn" id="downloadBtn" type="button">下载</button>
             </div>
             <div class="preview" id="preview">
-              <div class="empty" id="emptyState">
-                <div class="orb">🖼️</div>
+              <div class=”empty” id=”emptyState”>
+                <div class=”orb”>🖼️</div>
                 <strong>等待生成</strong>
-                <p>输入画面描述，选择参数，然后点击“开始生图”。</p>
+                <p>在左侧输入画面描述，然后点击「开始生图」。</p>
+                <div style=”margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap;” id=”presetHints”>
+                  <button class=”btn preset-tag” type=”button”>星空下的城市</button>
+                  <button class=”btn preset-tag” type=”button”>可爱的机器猫</button>
+                  <button class=”btn preset-tag” type=”button”>赛博朋克少女</button>
+                  <button class=”btn preset-tag” type=”button”>水墨山水画</button>
+                  <button class=”btn preset-tag” type=”button”>未来城市夜景</button>
+                </div>
               </div>
               <img class="result-img" id="resultImg" alt="生成结果预览" />
               <div class="loading" id="loading">
@@ -934,6 +955,8 @@
     const $ = (q) => document.querySelector(q);
     const $$ = (q) => [...document.querySelectorAll(q)];
 
+    const isExhibit = new URLSearchParams(window.location.search).has("exhibit");
+
     const promptEl = $("#prompt");
     const toast = $("#toast");
     const transcript = $("#transcript");
@@ -956,6 +979,23 @@
     let mediaRecorder = null;
     let isMimoRecording = false;
     let audioChunks = [];
+    let autoResetTimer = null;
+    let loadingMessageTimer = null;
+
+    const LOADING_MESSAGES = [
+      "AI 正在理解你的描述...",
+      "正在构思画面布局...",
+      "正在绘制细节...",
+      "即将完成，请稍候...",
+    ];
+
+    const presetTexts = {
+      "星空下的城市": "璀璨星空下的未来城市，霓虹灯映照在高楼玻璃幕墙上，赛博朋克风格，高清细节，电影感构图",
+      "可爱的机器猫": "一只圆滚滚的可爱机器猫，金属质感，大眼睛，柔和灯光，日式插画风格，背景纯色",
+      "赛博朋克少女": "赛博朋克风格的少女，紫色和蓝色霓虹光影，穿着高科技外套，雨夜街道，电影级画质",
+      "水墨山水画": "中国水墨山水画，远山近水，白鹤飞翔，留白构图，传统笔触，宣纸质感",
+      "未来城市夜景": "未来城市夜景，飞行汽车穿梭在摩天大楼之间，全息广告牌，科幻光影，超高细节",
+    };
 
     const pinyinDict = {
       ni: ["你", "拟", "逆"], hao: ["好", "号", "浩"], ma: ["吗", "码", "马"],
@@ -973,21 +1013,50 @@
       mianban: ["面板"], xuanxiang: ["选项"], gaoji: ["高级"], tongtou: ["通透"],
       ganjing: ["干净"], shengtu: ["生图"], yuyin: ["语音"], shuru: ["输入"],
       jiemian: ["界面"], pingtai: ["平台"], guangying: ["光影"], baise: ["白色"],
-      boli: ["玻璃"], qingliang: ["清亮"], jianjie: ["简洁"], gaoji: ["高级"]
+      boli: ["玻璃"], qingliang: ["清亮"], jianjie: ["简洁"]
     };
+
+    function userError(msg) {
+      if (msg && msg.startsWith("upstream")) return "AI 服务暂时不可用，请稍后再试。";
+      if (msg && /not configured/i.test(msg)) return "AI 服务正在配置中，暂时无法使用。";
+      if (msg && /too large/i.test(msg)) return "描述内容过长，请缩短后重试。";
+      return msg || "操作失败，请稍后重试。";
+    }
+
+    function scheduleAutoReset() {
+      if (!isExhibit) return;
+      clearTimeout(autoResetTimer);
+      autoResetTimer = setTimeout(resetAll, 60000);
+    }
+
+    function resetAll() {
+      promptEl.value = "";
+      pinyinBuffer = "";
+      transcript.textContent = "语音识别结果会显示在这里。";
+      resultImg.removeAttribute("src");
+      resultImg.style.display = "none";
+      emptyState.style.display = "";
+      generatedUrl = "";
+      $("#resultNote").textContent = "等待生成。";
+      $("#meta").textContent = "Text to Image";
+      $("#time").textContent = "Ready";
+      renderCandidates();
+      updateCount();
+      scheduleAutoReset();
+    }
 
     const showToast = (text) => {
       toast.textContent = text;
       toast.classList.add("show");
       clearTimeout(showToast.timer);
-      showToast.timer = setTimeout(() => toast.classList.remove("show"), 1800);
+      showToast.timer = setTimeout(() => toast.classList.remove("show"), 2500);
     };
 
     const updateCount = () => {
       $("#count").textContent = `${promptEl.value.trim().length} 字`;
     };
 
-    promptEl.addEventListener("input", updateCount);
+    promptEl.addEventListener("input", () => { updateCount(); scheduleAutoReset(); });
 
     function insertAtCursor(text) {
       const start = promptEl.selectionStart ?? promptEl.value.length;
@@ -997,6 +1066,7 @@
       promptEl.setSelectionRange(pos, pos);
       updateCount();
       promptEl.focus();
+      scheduleAutoReset();
     }
 
     function addText(text) {
@@ -1012,6 +1082,7 @@
       promptEl.value = current ? `${current}，${cleaned}` : cleaned;
       updateCount();
       promptEl.focus();
+      scheduleAutoReset();
     }
 
     function getCandidates() {
@@ -1056,27 +1127,11 @@
     }
 
     function handleKeyboardAction(action) {
-      if (action === "clearPinyin") {
-        pinyinBuffer = "";
-      } else if (action === "backspace") {
-        if (pinyinBuffer) pinyinBuffer = pinyinBuffer.slice(0, -1);
-        else removeBackward();
-      } else if (action === "space") {
-        if (pinyinBuffer) {
-          insertAtCursor(getCandidates()[0]);
-          pinyinBuffer = "";
-        } else {
-          insertAtCursor(" ");
-        }
-      } else if (action === "punct") {
-        insertAtCursor("，");
-      } else if (action === "enter") {
-        if (pinyinBuffer) {
-          insertAtCursor(getCandidates()[0]);
-          pinyinBuffer = "";
-        }
-        insertAtCursor("\n");
-      }
+      if (action === "clearPinyin") { pinyinBuffer = ""; }
+      else if (action === "backspace") { if (pinyinBuffer) pinyinBuffer = pinyinBuffer.slice(0, -1); else removeBackward(); }
+      else if (action === "space") { if (pinyinBuffer) { insertAtCursor(getCandidates()[0]); pinyinBuffer = ""; } else insertAtCursor(" "); }
+      else if (action === "punct") { insertAtCursor("，"); }
+      else if (action === "enter") { if (pinyinBuffer) { insertAtCursor(getCandidates()[0]); pinyinBuffer = ""; } insertAtCursor("\n"); }
       renderCandidates();
     }
 
@@ -1086,10 +1141,7 @@
         btn.type = "button";
         btn.className = "vk-key";
         btn.textContent = letter;
-        btn.onclick = () => {
-          pinyinBuffer += letter;
-          renderCandidates();
-        };
+        btn.onclick = () => { pinyinBuffer += letter; renderCandidates(); };
         row.appendChild(btn);
       });
     });
@@ -1106,12 +1158,13 @@
       toggleInputBtn.textContent = keyboardOpen ? "收起键盘" : "打开键盘";
       inputModeTitle.textContent = keyboardOpen ? "虚拟键盘" : "语音输入";
       inputModeNote.textContent = keyboardOpen
-        ? "当前使用中文拼音键盘输入，点候选词上屏，空格默认选第一个。"
-        : "点击麦克风说出画面内容，或切换到虚拟键盘输入。";
+        ? "拼音键盘输入，点候选词上屏，空格选第一个。"
+        : "点击麦克风说出画面内容。";
     }
 
     toggleInputBtn.onclick = () => setInputMode(keyboardOpen ? "voice" : "keyboard");
-    $("#switchToKeyboardBtn").onclick = () => setInputMode("keyboard");
+    const switchToKeyboardBtn = $("#switchToKeyboardBtn");
+    if (switchToKeyboardBtn) switchToKeyboardBtn.onclick = () => setInputMode("keyboard");
 
     function enhancePrompt(text) {
       const base = String(text || "").trim();
@@ -1126,32 +1179,26 @@
       return $("#autoEnhance").classList.contains("active") ? enhancePrompt(raw) : raw;
     }
 
+    $$(".preset-tag").forEach((btn) => {
+      btn.onclick = () => {
+        const key = btn.textContent.trim();
+        promptEl.value = presetTexts[key] || key;
+        updateCount();
+        showToast("已填入示例");
+        scheduleAutoReset();
+      };
+    });
+
     $("#sampleBtn").onclick = () => {
       promptEl.value = "纯白苹果风 AI 生图页面，中心是发光麦克风入口，右侧是简洁生图选项，留白充足，界面通透安静，高级产品视觉。";
       updateCount();
       showToast("已填入示例");
+      scheduleAutoReset();
     };
 
-    $("#clearBtn").onclick = () => {
-      promptEl.value = "";
-      pinyinBuffer = "";
-      transcript.textContent = "语音识别结果会显示在这里。若浏览器不支持，可改用 MiMo 录音转写或切换到虚拟键盘。";
-      renderCandidates();
-      updateCount();
-      showToast("已清空");
-    };
-
+    $("#clearBtn").onclick = () => resetAll();
+    $("#resetBtn").onclick = () => resetAll();
     $("#autoEnhance").onclick = () => $("#autoEnhance").classList.toggle("active");
-
-    function escapeXml(text) {
-      return String(text).replace(/[&<>'"]/g, (char) => ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        "'": "&apos;",
-        "\"": "&quot;",
-      }[char]));
-    }
 
     async function readApiError(response) {
       const text = await response.text();
@@ -1159,26 +1206,16 @@
         const parsed = JSON.parse(text);
         return parsed.error || `接口错误：${response.status}`;
       } catch {
-        return `接口错误：${response.status} ${text.slice(0, 240)}`;
+        return `接口错误：${response.status} ${text.slice(0, 120)}`;
       }
     }
 
-    function defaultApiBase() {
-      const origin = window.location.origin.replace(/\/$/, "");
-      if (/^https?:\/\/127\.0\.0\.1(?::\d+)?$/i.test(origin) || /^https?:\/\/localhost(?::\d+)?$/i.test(origin)) {
-        return origin;
-      }
-      return `${origin}/.netlify/functions/proxy`;
-    }
-
-    function getApiBase() {
-      return ($("#apiBase").value.trim() || defaultApiBase()).replace(/\/$/, "");
-    }
+    function defaultApiBase() { return window.location.origin.replace(/\/$/, ""); }
+    function getApiBase() { return ($("#apiBase").value.trim() || defaultApiBase()).replace(/\/$/, ""); }
 
     function resolveEndpoint(path) {
       const base = getApiBase();
-      const isNetlifyProxyBase = /\/\.netlify\/functions\/proxy$/i.test(base);
-      if (!isNetlifyProxyBase) return `${base}${path}`;
+      if (!/\/.netlify\/functions\/proxy$/i.test(base)) return `${base}${path}`;
       if (path === "/config") return `${base}?route=config`;
       if (path === "/healthz") return `${base}?route=healthz`;
       if (path === "/v1/images/generations") return `${base}?route=generate`;
@@ -1186,25 +1223,33 @@
       return `${base}${path}`;
     }
 
+    function isValidImageUrl(url) {
+      return typeof url === "string" && (url.startsWith("https://") || url.startsWith("http://") || url.startsWith("data:image/"));
+    }
+
+    function startLoadingMessages() {
+      let idx = 0;
+      clearInterval(loadingMessageTimer);
+      loadingMessageTimer = setInterval(() => {
+        idx = (idx + 1) % LOADING_MESSAGES.length;
+        const el = $("#loadingText");
+        if (el) el.textContent = LOADING_MESSAGES[idx];
+      }, 3500);
+    }
+
+    function stopLoadingMessages() { clearInterval(loadingMessageTimer); }
+
     async function callLiveApi(finalPrompt) {
-      const base = getApiBase();
       const model = $("#model").value.trim() || "gpt-image-2";
       const response = await fetch(resolveEndpoint("/v1/images/generations"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model,
-          prompt: finalPrompt,
-          size: $("#size").value,
-          quality: $("#quality").value,
-          response_format: $("#responseFormat").value,
-          n: 1,
-        }),
+        body: JSON.stringify({ model, prompt: finalPrompt, size: $("#size").value, quality: $("#quality").value, response_format: $("#responseFormat").value, n: 1 }),
       });
       if (!response.ok) throw new Error(await readApiError(response));
       const data = await response.json();
       const direct = data?.data?.[0]?.url || data?.url || data?.image_url;
-      if (direct) return direct;
+      if (direct && isValidImageUrl(direct)) return direct;
       const b64 = data?.data?.[0]?.b64_json;
       if (b64) return `data:image/png;base64,${b64}`;
       throw new Error("没有在响应中找到图片 URL。");
@@ -1213,16 +1258,16 @@
     async function loadServerConfig() {
       try {
         const base = getApiBase();
-        if (base && base !== window.location.origin && !/^https?:\/\/127\.0\.0\.1(?::\d+)?$/i.test(base) && !/^https?:\/\/localhost(?::\d+)?$/i.test(base)) {
-          return;
-        }
+        if (base !== window.location.origin && base !== defaultApiBase()) return;
         const response = await fetch(resolveEndpoint("/config"), { headers: { Accept: "application/json" } });
         if (!response.ok) return;
         const config = await response.json();
-        if (config.model) $("#model").value = config.model;
-      } catch {
-        // 静态托管场景下允许 /config 不存在。
-      }
+        if (config.model) {
+          $("#model").value = config.model;
+          const st = $("#statusText");
+          if (st) st.textContent = `在线 · ${config.model}`;
+        }
+      } catch { console.warn("loadServerConfig: /config unavailable"); }
     }
 
     function blobToDataUrl(blob) {
@@ -1236,7 +1281,6 @@
 
     async function transcribeWithMimo(blob) {
       const audioData = await blobToDataUrl(blob);
-      const base = getApiBase();
       const response = await fetch(resolveEndpoint("/stt/transcribe"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1245,36 +1289,36 @@
       if (!response.ok) throw new Error(await readApiError(response));
       const data = await response.json();
       const text = String(data.text || "").trim();
-      if (!text) throw new Error("MiMo 没有返回转写文本");
+      if (!text) throw new Error("语音转写未返回内容");
       return text;
     }
 
     async function generate() {
       const finalPrompt = buildPrompt();
-      if (!finalPrompt) {
-        showToast("先输入画面描述");
-        return;
-      }
+      if (!finalPrompt) { showToast("请先输入画面描述"); return; }
       loading.classList.add("show");
-      $("#loadingText").textContent = "正在调用真实接口...";
-      $("#time").textContent = "Generating...";
+      $("#loadingText").textContent = LOADING_MESSAGES[0];
+      $("#time").textContent = "生成中...";
+      startLoadingMessages();
       try {
         const url = await callLiveApi(finalPrompt);
-        $("#resultNote").textContent = "真实接口返回结果。";
+        stopLoadingMessages();
+        $("#resultNote").textContent = "AI 创作完成！";
         generatedUrl = url;
         resultImg.src = url;
         resultImg.style.display = "block";
         emptyState.style.display = "none";
-        $("#meta").textContent = `Live Output · ${$("#size").value} · ${$("#quality").value}`;
+        $("#meta").textContent = `${$("#size").value} · ${$("#quality").value}`;
         $("#time").textContent = new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
-        showToast("真实接口返回成功");
+        showToast("AI 创作完成！");
+        scheduleAutoReset();
       } catch (error) {
-        $("#resultNote").textContent = error.message || "生成失败";
-        $("#time").textContent = "Error";
-        showToast(error.message || "生成失败");
-      } finally {
-        loading.classList.remove("show");
-      }
+        stopLoadingMessages();
+        const msg = userError(error.message);
+        $("#resultNote").textContent = msg;
+        $("#time").textContent = "失败";
+        showToast(msg);
+      } finally { loading.classList.remove("show"); }
     }
 
     $("#generateBtn").onclick = generate;
@@ -1282,86 +1326,72 @@
       if ((event.ctrlKey || event.metaKey) && event.key === "Enter") generate();
     });
 
-    $("#downloadBtn").onclick = () => {
-      if (!generatedUrl) {
-        showToast("还没有生成结果");
-        return;
-      }
-      const link = document.createElement("a");
-      link.href = generatedUrl;
-      link.download = generatedUrl.startsWith("data:image/svg") ? "image2-voice-demo.svg" : `image2-${Date.now()}.png`;
-      link.click();
+    $("#downloadBtn").onclick = async () => {
+      if (!generatedUrl) { showToast("还没有生成结果"); return; }
+      try {
+        if (generatedUrl.startsWith("data:")) {
+          const link = document.createElement("a");
+          link.href = generatedUrl;
+          link.download = `image2-${Date.now()}.png`;
+          link.click();
+        } else {
+          const resp = await fetch(generatedUrl);
+          const blob = await resp.blob();
+          const blobUrl = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = blobUrl;
+          link.download = `image2-${Date.now()}.png`;
+          link.click();
+          setTimeout(() => URL.revokeObjectURL(blobUrl), 5000);
+        }
+      } catch { window.open(generatedUrl, "_blank"); }
     };
 
     function setupSpeech() {
-      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-      if (!SpeechRecognition) {
-        transcript.textContent = "当前浏览器不支持 Web Speech API。建议用 Chrome / Edge，或改用 MiMo 录音转写。";
+      const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SR) {
+        transcript.textContent = "当前浏览器不支持语音识别，建议用 Chrome 或 Edge。";
+        micBtn.disabled = true;
+        micBtn.style.opacity = "0.4";
+        micLabel.textContent = "不可用";
         return false;
       }
-      recognition = new SpeechRecognition();
+      recognition = new SR();
       recognition.continuous = false;
       recognition.interimResults = true;
       recognition.lang = $("#voiceLang").value;
-      recognition.onstart = () => {
-        listening = true;
-        micBtn.classList.add("listening");
-        micLabel.textContent = "正在聆听";
-        transcript.textContent = "请开始说话...";
-      };
+      recognition.onstart = () => { listening = true; micBtn.classList.add("listening"); micLabel.textContent = "正在聆听"; transcript.textContent = "请开始说话..."; };
       recognition.onresult = (event) => {
-        let interim = "";
-        let finalText = "";
+        let interim = ""; let finalText = "";
         for (let i = event.resultIndex; i < event.results.length; i += 1) {
-          const text = event.results[i][0].transcript;
-          if (event.results[i].isFinal) finalText += text;
-          else interim += text;
+          const t = event.results[i][0].transcript;
+          if (event.results[i].isFinal) finalText += t; else interim += t;
         }
         transcript.textContent = finalText || interim || "正在识别...";
         if (finalText) addText(finalText.trim());
       };
-      recognition.onerror = (event) => {
-        showToast(`语音识别失败：${event.error || "unknown"}`);
-      };
-      recognition.onend = () => {
-        listening = false;
-        micBtn.classList.remove("listening");
-        micLabel.textContent = "开始语音";
-      };
+      recognition.onerror = () => { showToast("语音识别出现问题，请重试"); };
+      recognition.onend = () => { listening = false; micBtn.classList.remove("listening"); micLabel.textContent = "开始语音"; };
       return true;
     }
 
     micBtn.onclick = () => {
-      if (!recognition && !setupSpeech()) {
-        showToast("浏览器不支持语音识别");
-        return;
-      }
+      if (!recognition && !setupSpeech()) return;
       recognition.lang = $("#voiceLang").value;
-      if (listening) recognition.stop();
-      else recognition.start();
+      if (listening) recognition.stop(); else recognition.start();
     };
 
-    $("#voiceLang").onchange = () => {
-      if (recognition) recognition.lang = $("#voiceLang").value;
-    };
+    $("#voiceLang").onchange = () => { if (recognition) recognition.lang = $("#voiceLang").value; };
 
     async function toggleMimoRecording() {
-      if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
-        showToast("当前浏览器不支持录音 API");
-        return;
-      }
+      if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") { showToast("当前浏览器不支持录音"); return; }
       const button = $("#mimoButton");
-      if (isMimoRecording && mediaRecorder) {
-        mediaRecorder.stop();
-        return;
-      }
+      if (isMimoRecording && mediaRecorder) { mediaRecorder.stop(); return; }
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         audioChunks = [];
         mediaRecorder = new MediaRecorder(stream);
-        mediaRecorder.ondataavailable = (event) => {
-          if (event.data?.size) audioChunks.push(event.data);
-        };
+        mediaRecorder.ondataavailable = (event) => { if (event.data?.size) audioChunks.push(event.data); };
         mediaRecorder.onstop = async () => {
           isMimoRecording = false;
           button.textContent = "MiMo 录音转写";
@@ -1369,27 +1399,24 @@
           micLabel.textContent = "开始语音";
           stream.getTracks().forEach((track) => track.stop());
           const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || "audio/webm" });
-          if (!blob.size) {
-            showToast("没有录到音频");
-            return;
-          }
-          transcript.textContent = "MiMo 正在转写录音...";
+          if (!blob.size) { showToast("没有录到音频"); return; }
+          transcript.textContent = "正在转写录音...";
           try {
             const text = await transcribeWithMimo(blob);
             transcript.textContent = text;
             addText(text);
-            showToast("MiMo 转写完成");
+            showToast("转写完成");
           } catch (error) {
-            transcript.textContent = error.message || "MiMo 转写失败";
-            showToast(error.message || "MiMo 转写失败");
+            transcript.textContent = userError(error.message);
+            showToast(userError(error.message));
           }
         };
         mediaRecorder.start();
         isMimoRecording = true;
         button.textContent = "停止并转写";
         micBtn.classList.add("listening");
-        micLabel.textContent = "MiMo 录音中";
-        transcript.textContent = "正在录音，点击“停止并转写”后发送到 MiMo。";
+        micLabel.textContent = "录音中";
+        transcript.textContent = "正在录音，点击「停止并转写」后发送。";
       } catch (error) {
         showToast(error?.name === "NotAllowedError" ? "浏览器未允许麦克风权限" : "无法启动录音");
       }
@@ -1397,10 +1424,36 @@
 
     $("#mimoButton").onclick = toggleMimoRecording;
 
+    // 展厅模式：隐藏高级选项、虚拟键盘切换、下载按钮、快捷键提示
+    if (isExhibit) {
+      const ag = document.querySelector(".advanced-grid");
+      if (ag) ag.style.display = "none";
+      if (toggleInputBtn) toggleInputBtn.style.display = "none";
+      const skb = $("#switchToKeyboardBtn");
+      if (skb) skb.style.display = "none";
+      const dl = $("#downloadBtn");
+      if (dl) dl.style.display = "none";
+      const sh = $("#shortcutHint");
+      if (sh) sh.style.display = "none";
+      const sp = $("#statusPill");
+      if (sp) sp.style.display = "none";
+      const vl = $("#voiceLang");
+      if (vl) { vl.value = "zh-CN"; vl.disabled = true; }
+      const vm = $("#voiceMode");
+      if (vm) { vm.value = "append"; vm.disabled = true; }
+    }
+
+    // 触摸设备隐藏快捷键提示
+    if ("ontouchstart" in window) {
+      const sh = $("#shortcutHint");
+      if (sh) sh.style.display = "none";
+    }
+
     updateCount();
     renderCandidates();
     setInputMode("voice");
     loadServerConfig();
+    scheduleAutoReset();
   </script>
 </body>
 </html>

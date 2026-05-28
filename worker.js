@@ -5,6 +5,7 @@ const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const ALLOWED_API_PATHS = new Set(["/v1/images/generations"]);
 const ALLOWED_ORIGINS = "ALLOWED_ORIGINS";
 const STT_PATH = "/stt/transcribe";
+const ALLOWED_LANGS = new Set(["zh-CN", "en-US", "ja-JP", "zh-TW", "ko-KR", "fr-FR", "de-DE", "es-ES"]);
 
 export default {
   async fetch(request, env) {
@@ -20,6 +21,10 @@ export default {
 
     if (request.method === "GET" && url.pathname === "/healthz") {
       return json({ ok: true, liveConfigured: Boolean(env.OPENAI_API_KEY) }, 200, request, env);
+    }
+
+    if (request.method === "GET" && url.pathname === "/config") {
+      return json({ model: env.OPENAI_MODEL || "gpt-image-2", liveConfigured: Boolean(env.OPENAI_API_KEY) }, 200, request, env);
     }
 
     if (request.method === "POST" && ALLOWED_API_PATHS.has(url.pathname)) {
@@ -95,6 +100,9 @@ async function proxyStt(request, env) {
   }
 
   const language = String(body.lang || "zh-CN");
+  if (!ALLOWED_LANGS.has(language)) {
+    return json({ error: "unsupported language code" }, 400, request, env);
+  }
   const upstream = await fetch(buildUpstreamUrl(env.MIMO_BASE_URL || DEFAULT_MIMO_BASE_URL, "/v1/chat/completions"), {
     method: "POST",
     headers: {
@@ -210,8 +218,18 @@ function extractTranscript(data) {
   if (direct) return direct;
   if (Array.isArray(data?.choices)) {
     for (const choice of data.choices) {
-      const text = cleanText(choice?.message?.content) || cleanText(choice?.text);
-      if (text) return text;
+      const content = choice?.message?.content;
+      if (typeof content === "string") { const t = content.trim(); if (t) return t; }
+      if (Array.isArray(content)) {
+        for (const part of content) {
+          const t = cleanText(part?.text) || cleanText(part?.transcript);
+          if (t) return t;
+        }
+      }
+      const rc = cleanText(choice?.message?.reasoning_content);
+      if (rc) return rc;
+      const ct = cleanText(choice?.text);
+      if (ct) return ct;
     }
   }
   return cleanText(data?.output);
@@ -232,8 +250,8 @@ function corsHeaders(request, env) {
     "Access-Control-Allow-Headers": "Content-Type",
     Vary: "Origin",
   };
-  if (isOriginAllowed(origin, env)) {
-    headers["Access-Control-Allow-Origin"] = origin || "null";
+  if (origin && isOriginAllowed(origin, env)) {
+    headers["Access-Control-Allow-Origin"] = origin;
   }
   return {
     ...headers,

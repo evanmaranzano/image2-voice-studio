@@ -32,7 +32,9 @@ ROOT = Path(__file__).resolve().parent
 
 def load_dotenv(path: Path) -> None:
     if not path.is_file():
+        sys.stderr.write(f"[serve] .env not found at {path}\n")
         return
+    sys.stderr.write(f"[serve] loading {path}\n")
     for raw_line in path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#") or "=" not in line:
@@ -56,9 +58,11 @@ MIMO_API_KEY = os.environ.get("MIMO_API_KEY", "").strip()
 MIMO_BASE_URL = os.environ.get("MIMO_BASE_URL", "https://token-plan-cn.xiaomimimo.com/v1").rstrip("/")
 MIMO_MODEL = os.environ.get("MIMO_MODEL", "MiMo-V2-Omni").strip() or "MiMo-V2-Omni"
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_STT_BODY_BYTES = MAX_UPLOAD_BYTES * 2
 MAX_AUDIO_BYTES = MAX_UPLOAD_BYTES
 UPSTREAM_TIMEOUT_SECONDS = 300
 UPSTREAM_RETRY_COUNT = 3
+ALLOWED_LANGS = {"zh-CN", "en-US", "ja-JP", "zh-TW", "ko-KR", "fr-FR", "de-DE", "es-ES"}
 DEFAULT_ALLOWED_ORIGINS = {f"http://127.0.0.1:{PORT}", f"http://localhost:{PORT}"}
 ALLOWED_ORIGINS = DEFAULT_ALLOWED_ORIGINS | set()
 ORIGIN_REJECT_STATUS = 403
@@ -176,9 +180,11 @@ def normalize_mimo_model(model: str) -> str:
     return model
 
 
-def sanitize_content_type(content_type: str | None, path: str) -> str:
+def sanitize_content_type(content_type: str | None) -> str:
     if content_type and content_type.startswith("application/json"):
         return "application/json"
+    if content_type and content_type.startswith("image/"):
+        return content_type.split(";", 1)[0].strip()
     return "application/json"
 
 
@@ -296,7 +302,7 @@ class Handler(SimpleHTTPRequestHandler):
             method="POST",
             headers={
                 "Authorization": f"Bearer {API_KEY}",
-                "Content-Type": sanitize_content_type(self.headers.get("Content-Type"), path),
+                "Content-Type": sanitize_content_type(self.headers.get("Content-Type")),
                 "User-Agent": "Mozilla/5.0 Image2VoiceStudio/1.0",
             },
         )
@@ -309,7 +315,8 @@ class Handler(SimpleHTTPRequestHandler):
             data = err.read() or json_bytes({"error": f"upstream HTTP {err.code}"})
             self._write(err.code, data, err.headers.get("Content-Type", "application/json; charset=utf-8"))
         except Exception as err:
-            self._write_json(HTTPStatus.BAD_GATEWAY, {"error": f"local proxy: {err}"})
+            sys.stderr.write(f"[serve] proxy error: {err}\n")
+            self._write_json(HTTPStatus.BAD_GATEWAY, {"error": "upstream request failed"})
 
     def _proxy_stt(self) -> None:
         if not MIMO_API_KEY:
@@ -325,7 +332,7 @@ class Handler(SimpleHTTPRequestHandler):
             self._write_json(HTTPStatus.BAD_REQUEST, {"error": "invalid Content-Length"})
             return
 
-        if content_length > MAX_UPLOAD_BYTES * 2:
+        if content_length > MAX_STT_BODY_BYTES:
             self._write_json(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, {"error": "request body is too large"})
             return
 
@@ -348,6 +355,9 @@ class Handler(SimpleHTTPRequestHandler):
             return
 
         language = str(payload.get("lang") or "zh-CN")
+        if language not in ALLOWED_LANGS:
+            self._write_json(HTTPStatus.BAD_REQUEST, {"error": "unsupported language code"})
+            return
         prompt = (
             "请把这段音频转写为纯文本，只返回转写内容。"
             f"音频 MIME 类型：{mime_type}。优先按 {language} 识别。"
@@ -387,7 +397,8 @@ class Handler(SimpleHTTPRequestHandler):
             data = err.read() or json_bytes({"error": f"MiMo upstream HTTP {err.code}"})
             self._write(err.code, data, err.headers.get("Content-Type", "application/json; charset=utf-8"))
         except Exception as err:
-            self._write_json(HTTPStatus.BAD_GATEWAY, {"error": f"MiMo proxy: {err}"})
+            sys.stderr.write(f"[serve] mimo proxy error: {err}\n")
+            self._write_json(HTTPStatus.BAD_GATEWAY, {"error": "upstream STT request failed"})
 
 class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True

@@ -3,8 +3,10 @@ const DEFAULT_MODEL = "gpt-image-2";
 const DEFAULT_MIMO_BASE_URL = "https://token-plan-cn.xiaomimimo.com/v1";
 const DEFAULT_MIMO_MODEL = "MiMo-V2-Omni";
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+const MAX_STT_BODY_BYTES = MAX_UPLOAD_BYTES * 2;
 const IMAGE_PATH = "/v1/images/generations";
 const STT_PATH = "/stt/transcribe";
+const ALLOWED_LANGS = new Set(["zh-CN", "en-US", "ja-JP", "zh-TW", "ko-KR", "fr-FR", "de-DE", "es-ES"]);
 
 export default async (req) => {
   const url = new URL(req.url);
@@ -82,7 +84,7 @@ async function proxyImage(req) {
       },
     });
   } catch (error) {
-    return json({ error: `image proxy failed: ${error.message || error}` }, 502, req);
+    return json({ error: "image proxy failed" }, 502, req);
   }
 }
 
@@ -92,9 +94,14 @@ async function proxyStt(req) {
     return json({ error: "MIMO_API_KEY is not configured" }, 503, req);
   }
 
+  const body = await readBody(req, MAX_STT_BODY_BYTES);
+  if (body.error) {
+    return json({ error: body.error }, body.status, req);
+  }
+
   let payload;
   try {
-    payload = await req.json();
+    payload = JSON.parse(new TextDecoder().decode(body.buffer));
   } catch {
     return json({ error: "invalid JSON body" }, 400, req);
   }
@@ -111,6 +118,9 @@ async function proxyStt(req) {
   }
 
   const language = String(payload.lang || "zh-CN");
+  if (!ALLOWED_LANGS.has(language)) {
+    return json({ error: "unsupported language code" }, 400, req);
+  }
   const upstream = await fetch(buildUpstreamUrl(env("MIMO_BASE_URL") || DEFAULT_MIMO_BASE_URL, "/v1/chat/completions"), {
     method: "POST",
     headers: {
@@ -198,7 +208,7 @@ function parseAllowedOrigins() {
 function isOriginAllowed(origin) {
   if (!origin) return true;
   const allowed = parseAllowedOrigins();
-  if (!allowed.length) return true;
+  if (!allowed.length) return false;
   return allowed.includes(origin.replace(/\/$/, ""));
 }
 
@@ -209,8 +219,8 @@ function corsHeaders(req) {
     "Access-Control-Allow-Headers": "Content-Type",
     Vary: "Origin",
   };
-  if (isOriginAllowed(origin)) {
-    headers["Access-Control-Allow-Origin"] = origin || "null";
+  if (origin && isOriginAllowed(origin)) {
+    headers["Access-Control-Allow-Origin"] = origin;
   }
   return headers;
 }
@@ -248,7 +258,7 @@ function parseAudioDataUrl(dataUrl) {
     mp4: "mp4",
     m4a: "m4a",
   };
-  return { mimeType, format: formatMap[subtype] || subtype, byteLength };
+  return { mimeType, format: formatMap[subtype] || subtype, data, byteLength };
 }
 
 function cleanText(value) {
@@ -265,8 +275,18 @@ function extractTranscript(data) {
   if (direct) return direct;
   if (Array.isArray(data?.choices)) {
     for (const choice of data.choices) {
-      const text = cleanText(choice?.message?.content) || cleanText(choice?.message?.reasoning_content) || cleanText(choice?.text);
-      if (text) return text;
+      const content = choice?.message?.content;
+      if (typeof content === "string") { const t = content.trim(); if (t) return t; }
+      if (Array.isArray(content)) {
+        for (const part of content) {
+          const t = cleanText(part?.text) || cleanText(part?.transcript);
+          if (t) return t;
+        }
+      }
+      const rc = cleanText(choice?.message?.reasoning_content);
+      if (rc) return rc;
+      const ct = cleanText(choice?.text);
+      if (ct) return ct;
     }
   }
   return cleanText(data?.output);
