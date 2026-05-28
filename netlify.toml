@@ -3,3 +3,6 @@ publish = "."
 
 [functions]
 directory = "netlify/functions"
+
+[functions."proxy"]
+maxDuration = 60

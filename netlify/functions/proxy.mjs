@@ -58,21 +58,27 @@ async function proxyImage(req) {
     return json({ error: "OPENAI_API_KEY is not configured" }, 503, req);
   }
 
-  const body = await readBody(req, MAX_UPLOAD_BYTES);
-  if (body.error) {
-    return json({ error: body.error }, body.status, req);
+  const contentLength = Number(req.headers.get("content-length") || "0");
+  if (contentLength > MAX_UPLOAD_BYTES) {
+    return json({ error: "request body is too large" }, 413, req);
+  }
+
+  let body;
+  try {
+    body = await req.json();
+  } catch {
+    return json({ error: "invalid JSON body" }, 400, req);
   }
 
   try {
-    const bodyBuffer = body.buffer instanceof ArrayBuffer ? new Uint8Array(body.buffer) : body.buffer;
     const response = await fetch(buildUpstreamUrl(env("OPENAI_BASE_URL") || DEFAULT_BASE_URL, IMAGE_PATH), {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
-        "Content-Type": req.headers.get("content-type") || "application/json",
+        "Content-Type": "application/json",
         "User-Agent": "Mozilla/5.0 Image2VoiceStudio/1.0",
       },
-      body: bodyBuffer,
+      body: JSON.stringify(body),
     });
 
     const raw = await response.text();
