@@ -696,25 +696,45 @@ renderCand();
 function setupSpeech() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { showToast("浏览器不支持语音识别"); return false; }
-  recognition = new SR(); recognition.continuous = false; recognition.interimResults = true;
+  recognition = new SR(); recognition.continuous = true; recognition.interimResults = true;
   recognition.lang = _q("#voiceLang").value;
-  recognition.onstart = () => { listening = true; _q("#micBtn").classList.add("listening"); _q("#micLabel").textContent = "正在聆听..."; };
+  let lastFinal = "";
+  recognition.onstart = () => { listening = true; lastFinal = ""; _q("#micBtn").classList.add("listening"); _q("#micLabel").textContent = "正在聆听..."; };
   recognition.onresult = (e) => {
     let inter = "", fin = "";
     for (let i = e.resultIndex; i < e.results.length; i++) {
       const t = e.results[i][0].transcript;
       if (e.results[i].isFinal) fin += t; else inter += t;
     }
+    if (fin) lastFinal = fin;
     _q("#transcript").textContent = fin || inter || "识别中...";
     if (fin) {
       const cleaned = fin.trim();
+      if (!cleaned) return;
       if (_q("#voiceMode").value === "replace") { input.value = cleaned; }
       else { const cur = input.value.trim(); input.value = cur ? cur + "，" + cleaned : cleaned; }
       autoH();
     }
   };
   recognition.onerror = () => showToast("语音识别出错");
-  recognition.onend = () => { listening = false; _q("#micBtn").classList.remove("listening"); _q("#micLabel").textContent = "点击开始语音"; };
+  recognition.onend = () => {
+    listening = false;
+    _q("#micBtn").classList.remove("listening");
+    _q("#micLabel").textContent = "点击开始语音";
+    // 如果有最后结果没写入（continuous=false 场景），确保写入
+    if (lastFinal) {
+      const cleaned = lastFinal.trim();
+      if (cleaned) {
+        const cur = input.value.trim();
+        if (!cur.includes(cleaned)) {
+          if (_q("#voiceMode").value === "replace") { input.value = cleaned; }
+          else { input.value = cur ? cur + "，" + cleaned : cleaned; }
+          autoH();
+        }
+      }
+      lastFinal = "";
+    }
+  };
   return true;
 }
 
@@ -812,8 +832,8 @@ bindPresets();
 })();
 
 if (isExhibit) {
-  const vl = _q("#voiceLang"); if (vl) { vl.value = "zh-CN"; vl.disabled = true; }
-  const vm = _q("#voiceMode"); if (vm) { vm.value = "append"; vm.disabled = true; }
+  const vl = _q("#voiceLang"); if (vl) { vl.value = "zh-CN"; }
+  const vm = _q("#voiceMode"); if (vm) { vm.value = "append"; }
 }
 
 input.focus();
