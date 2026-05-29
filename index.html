@@ -721,7 +721,7 @@ function setupSpeech() {
     listening = false;
     _q("#micBtn").classList.remove("listening");
     _q("#micLabel").textContent = "点击开始语音";
-    // 如果有最后结果没写入（continuous=false 场景），确保写入
+    _q("#transcript").textContent = lastFinal ? lastFinal.trim() : _q("#transcript").textContent.replace("识别中...", "识别已停止");
     if (lastFinal) {
       const cleaned = lastFinal.trim();
       if (cleaned) {
