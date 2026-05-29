@@ -46,5 +46,3 @@ export default async (req) => {
     return json({ error: err.message }, 500, req);
   }
 };
-
-export const config = { path: "/conversations" };
