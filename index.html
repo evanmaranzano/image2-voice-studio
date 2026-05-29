@@ -969,8 +969,9 @@ function getSettingsSnapshot() {
 }
 
 async function loadConversations() {
-  try { conversations = JSON.parse(localStorage.getItem("image2_conversations") || "[]"); }
-  catch { conversations = []; }
+  let local = [];
+  try { local = JSON.parse(localStorage.getItem("image2_conversations") || "[]"); }
+  catch {}
   try {
     const r = await fetch("/.netlify/functions/conversations");
     if (r.ok) {
@@ -978,9 +979,19 @@ async function loadConversations() {
       if (Array.isArray(remote) && remote.length) {
         conversations = remote;
         localStorage.setItem("image2_conversations", JSON.stringify(conversations));
+        return;
       }
     }
   } catch {}
+  // remote empty or unreachable: use local, and push to remote
+  conversations = local;
+  if (local.length) {
+    fetch("/.netlify/functions/conversations", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(local),
+    }).catch(() => {});
+  }
 }
 
 function saveConversations() {
