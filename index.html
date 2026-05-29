@@ -448,11 +448,11 @@ textarea, input, select { font-family: inherit; outline: none; }
       <div class="kbd-row r2" data-row="asdfghjkl"></div>
       <div class="kbd-row r3" data-row="zxcvbnm"></div>
       <div class="kbd-row r4">
-        <button class="vk act" data-action="clearPinyin" type="button">清</button>
-        <button class="vk" data-action="backspace" type="button">⌫</button>
-        <button class="vk act" data-action="space" type="button">空格</button>
-        <button class="vk" data-action="punct" type="button">，</button>
-        <button class="vk act" data-action="enter" type="button">↵</button>
+        <button class="vk act" data-action="clearPinyin" type="button" onclick="kbAction('clearPinyin')">清空</button>
+        <button class="vk" data-action="backspace" type="button" onclick="kbAction('backspace')">⌫</button>
+        <button class="vk act" data-action="space" type="button" onclick="kbAction('space')">空格</button>
+        <button class="vk" data-action="punct" type="button" onclick="kbAction('punct')">，</button>
+        <button class="vk act" data-action="enter" type="button" onclick="kbAction('enter')">↵</button>
       </div>
     </div>
 
@@ -709,7 +709,7 @@ function removeBack() {
   autoH(); input.focus();
 }
 
-function kbAction(a) {
+window.kbAction = function(a) {
   if (a === "clearPinyin") pinyinBuffer = "";
   else if (a === "backspace") { if (pinyinBuffer) pinyinBuffer = pinyinBuffer.slice(0,-1); else removeBack(); }
   else if (a === "space") { if (pinyinBuffer) { insertText(getCandidates()[0]); pinyinBuffer = ""; } else insertText(" "); }
