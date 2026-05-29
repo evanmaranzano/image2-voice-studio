@@ -4,27 +4,24 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>AI 画图工坊</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg: #0d0d0d;
-  --surface: #1a1a1a;
-  --surface-2: #242424;
-  --surface-3: #2e2e2e;
-  --border: rgba(255,255,255,.08);
-  --border-light: rgba(255,255,255,.12);
-  --text: #e8e8e8;
-  --text-2: #a0a0a0;
-  --text-3: #666;
-  --accent: #6366f1;
-  --accent-glow: rgba(99,102,241,.15);
-  --accent-soft: rgba(99,102,241,.08);
-  --green: #22c55e;
+  --bg: #ffffff;
+  --bg-2: #f7f7f8;
+  --bg-3: #ececed;
+  --surface: #ffffff;
+  --surface-hover: #f5f5f6;
+  --border: #e5e5e5;
+  --border-2: #d9d9d9;
+  --text: #0d0d0d;
+  --text-2: #6e6e6e;
+  --text-3: #999;
+  --green: #10a37f;
+  --green-bg: rgba(16,163,127,.08);
   --radius: 16px;
-  --radius-lg: 24px;
-  --font-display: 'DM Sans', 'Noto Sans SC', system-ui, sans-serif;
-  --font-body: 'Noto Sans SC', 'DM Sans', system-ui, sans-serif;
+  --radius-lg: 20px;
+  --max-w: 768px;
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", Helvetica, sans-serif;
 }
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -33,460 +30,381 @@ html, body { height: 100%; }
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: var(--font-body);
+  font-family: var(--font);
   font-size: 15px;
   line-height: 1.6;
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
 }
 
+button { border: none; cursor: pointer; font-family: inherit; }
+textarea, input, select { font-family: inherit; outline: none; }
+
 .app {
   display: grid;
   grid-template-rows: 1fr auto;
   height: 100vh;
-  max-width: 820px;
-  margin: 0 auto;
-  position: relative;
+}
+
+/* ── Top Bar ── */
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0;
+  height: 52px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  z-index: 10;
+}
+.topbar-inner {
+  width: 100%; max-width: var(--max-w);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 16px;
+}
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-icon {
+  width: 30px; height: 30px; border-radius: 8px;
+  background: var(--green); color: #fff;
+  display: grid; place-items: center; font-size: 16px;
+}
+.brand-text { font-weight: 600; font-size: 16px; }
+.top-btns { display: flex; gap: 4px; }
+.tb {
+  width: 34px; height: 34px; border-radius: 8px;
+  background: transparent; color: var(--text-2); font-size: 16px;
+  display: grid; place-items: center;
+  transition: background .15s;
+}
+.tb:hover { background: var(--bg-2); }
+
+/* ── Settings Panel ── */
+.settings {
+  position: fixed; top: 52px; right: calc(50% - var(--max-w)/2 + 16px);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 14px; width: 220px;
+  z-index: 20; display: none; box-shadow: 0 8px 30px rgba(0,0,0,.08);
+}
+.settings.show { display: block; }
+.sr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.sr:last-child { margin-bottom: 0; }
+.sr label { font-size: 13px; color: var(--text-2); }
+.sr select, .sr input {
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: 8px; padding: 4px 8px; font-size: 13px;
+  color: var(--text); width: 110px;
 }
 
 /* ── Conversation ── */
-.conversation {
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 24px 20px 32px;
+.conv {
+  overflow-y: auto; overflow-x: hidden;
+  padding: 64px 0 0;
   scroll-behavior: smooth;
   scrollbar-width: thin;
-  scrollbar-color: var(--surface-3) transparent;
+  scrollbar-color: var(--bg-3) transparent;
 }
-.conversation::-webkit-scrollbar { width: 6px; }
-.conversation::-webkit-scrollbar-track { background: transparent; }
-.conversation::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 3px; }
+.conv::-webkit-scrollbar { width: 6px; }
+.conv::-webkit-scrollbar-thumb { background: var(--bg-3); border-radius: 3px; }
 
 /* ── Empty State ── */
-.empty-state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  min-height: 400px;
-  text-align: center;
-  animation: fadeIn .6s ease;
+.empty {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  height: calc(100vh - 64px - 120px);
+  text-align: center; animation: fadeIn .5s ease;
 }
-.empty-icon {
-  width: 72px; height: 72px;
-  border-radius: 22px;
-  background: linear-gradient(135deg, var(--accent), #8b5cf6);
-  display: grid; place-items: center;
-  font-size: 32px;
-  box-shadow: 0 12px 40px var(--accent-glow);
-  margin-bottom: 24px;
-}
-.empty-state h2 {
-  font-family: var(--font-display);
-  font-size: 26px;
-  font-weight: 700;
-  letter-spacing: -.02em;
+.empty h2 {
+  font-size: 24px; font-weight: 700; letter-spacing: -.02em;
   margin-bottom: 8px;
-  color: var(--text);
 }
-.empty-state p {
-  color: var(--text-2);
-  font-size: 14px;
-  max-width: 360px;
-  line-height: 1.5;
-}
-.presets {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  justify-content: center;
-  margin-top: 28px;
-}
+.empty p { color: var(--text-2); font-size: 14px; max-width: 340px; }
+.presets { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 24px; }
 .preset {
-  padding: 8px 16px;
-  border-radius: 999px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--text-2);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all .2s ease;
-  font-family: var(--font-body);
+  padding: 8px 16px; border-radius: 999px;
+  background: var(--bg-2); border: 1px solid var(--border);
+  color: var(--text-2); font-size: 13px; font-weight: 500;
+  transition: all .15s;
 }
-.preset:hover {
-  background: var(--surface-2);
-  border-color: var(--border-light);
-  color: var(--text);
-  transform: translateY(-1px);
-}
+.preset:hover { background: var(--bg-3); color: var(--text); }
 
 /* ── Messages ── */
-.message {
-  margin-bottom: 28px;
-  animation: msgIn .4s ease both;
-}
-.message.user { display: flex; justify-content: flex-end; }
-.message.user .bubble {
-  background: var(--accent);
-  color: #fff;
-  border-radius: 20px 20px 4px 20px;
-  padding: 12px 18px;
-  max-width: 75%;
-  font-size: 15px;
-  line-height: 1.55;
-  font-weight: 400;
-}
-.message.assistant { display: flex; gap: 12px; align-items: flex-start; }
+.msg { padding: 20px 16px; animation: msgIn .35s ease both; }
+.msg + .msg { border-top: 1px solid var(--border); }
+.msg-inner { max-width: var(--max-w); margin: 0 auto; display: flex; gap: 16px; }
+.msg.user .msg-inner { justify-content: flex-end; }
+
 .avatar {
-  width: 32px; height: 32px;
-  border-radius: 10px;
-  background: linear-gradient(135deg, var(--accent), #8b5cf6);
-  display: grid; place-items: center;
-  font-size: 15px;
-  flex-shrink: 0;
-  margin-top: 2px;
+  width: 28px; height: 28px; border-radius: 6px;
+  display: grid; place-items: center; flex-shrink: 0;
+  font-size: 14px; margin-top: 2px;
 }
-.assistant-content {
-  flex: 1;
-  min-width: 0;
-}
-.assistant-text {
-  color: var(--text-2);
-  font-size: 14px;
-  margin-bottom: 10px;
-}
-.image-card {
-  position: relative;
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  max-width: 520px;
-  animation: imageReveal .8s ease both;
-}
-.image-card img {
-  width: 100%;
-  display: block;
-  cursor: zoom-in;
-  transition: transform .3s ease;
-}
-.image-card img:hover { transform: scale(1.01); }
-.image-actions {
-  display: flex;
-  gap: 6px;
-  padding: 10px 12px;
-  background: var(--surface);
-  border-top: 1px solid var(--border);
-}
-.img-btn {
-  padding: 6px 14px;
-  border-radius: 999px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  color: var(--text-2);
-  font-size: 12px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all .15s ease;
-  font-family: var(--font-body);
-}
-.img-btn:hover { background: var(--surface-3); color: var(--text); }
-.img-btn.accent { background: var(--accent-soft); color: var(--accent); border-color: rgba(99,102,241,.2); }
-.img-btn.accent:hover { background: var(--accent-glow); }
+.avatar.ai { background: var(--green); color: #fff; }
 
-/* ── Generating indicator ── */
-.generating {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 0;
+.user-bubble {
+  background: var(--bg-2); border-radius: 18px;
+  padding: 10px 16px; max-width: 75%;
+  font-size: 15px; line-height: 1.5;
 }
-.gen-dots {
-  display: flex;
-  gap: 5px;
+.ai-content { flex: 1; min-width: 0; }
+.ai-label { color: var(--text-3); font-size: 13px; margin-bottom: 8px; }
+
+/* ── Image Card ── */
+.img-card {
+  border-radius: var(--radius-lg); overflow: hidden;
+  border: 1px solid var(--border); background: var(--bg-2);
+  max-width: 480px; animation: imgReveal .5s ease both;
 }
+.img-card img {
+  width: 100%; display: block; cursor: zoom-in;
+  transition: transform .2s;
+}
+.img-card img:hover { transform: scale(1.005); }
+.img-actions {
+  display: flex; gap: 6px; padding: 8px 10px;
+  border-top: 1px solid var(--border); background: var(--surface);
+}
+.iab {
+  padding: 5px 12px; border-radius: 999px;
+  background: var(--bg-2); border: 1px solid var(--border);
+  color: var(--text-2); font-size: 12px; font-weight: 500;
+  transition: all .12s;
+}
+.iab:hover { background: var(--bg-3); color: var(--text); }
+.iab.primary { background: var(--green-bg); color: var(--green); border-color: rgba(16,163,127,.2); }
+.iab.primary:hover { background: rgba(16,163,127,.15); }
+
+/* ── Generating ── */
+.gen { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
+.gen-dots { display: flex; gap: 4px; }
 .gen-dots span {
-  width: 7px; height: 7px;
-  border-radius: 50%;
-  background: var(--accent);
-  animation: bounce 1.4s ease-in-out infinite;
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--green); animation: dot 1.2s ease-in-out infinite;
 }
-.gen-dots span:nth-child(2) { animation-delay: .15s; }
-.gen-dots span:nth-child(3) { animation-delay: .3s; }
-.gen-text {
-  color: var(--text-3);
-  font-size: 13px;
-  font-style: italic;
+.gen-dots span:nth-child(2) { animation-delay: .12s; }
+.gen-dots span:nth-child(3) { animation-delay: .24s; }
+.gen-text { color: var(--text-3); font-size: 13px; }
+
+/* ── Error ── */
+.err {
+  background: #fef2f2; border: 1px solid #fecaca;
+  border-radius: 12px; padding: 12px 14px;
+  color: #dc2626; font-size: 13px; max-width: 480px;
 }
 
-/* ── Input Bar ── */
-.input-bar {
-  padding: 12px 20px 20px;
-  background: linear-gradient(180deg, transparent 0%, var(--bg) 30%);
+/* ── Input Area ── */
+.input-area {
+  padding: 0 16px 16px;
+  background: linear-gradient(180deg, transparent, var(--bg) 20%);
   position: relative;
 }
-.input-wrap {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  padding: 6px 6px 6px 18px;
-  transition: border-color .2s ease, box-shadow .2s ease;
+.input-box {
+  max-width: var(--max-w); margin: 0 auto;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 22px; padding: 6px;
+  transition: border-color .2s, box-shadow .2s;
 }
-.input-wrap:focus-within {
-  border-color: rgba(99,102,241,.4);
-  box-shadow: 0 0 0 3px var(--accent-glow);
+.input-box:focus-within {
+  border-color: var(--border-2);
+  box-shadow: 0 0 0 3px rgba(0,0,0,.04);
 }
-.input-wrap textarea {
-  flex: 1;
-  background: transparent;
-  border: none;
-  color: var(--text);
-  font-family: var(--font-body);
-  font-size: 15px;
-  line-height: 1.5;
-  resize: none;
-  outline: none;
-  padding: 8px 0;
-  max-height: 150px;
-  min-height: 24px;
+.input-row {
+  display: flex; align-items: flex-end; gap: 6px;
+  padding: 0 10px;
 }
-.input-wrap textarea::placeholder { color: var(--text-3); }
-.send-btn {
-  width: 40px; height: 40px;
-  border-radius: 12px;
-  background: var(--accent);
-  border: none;
-  color: white;
-  cursor: pointer;
-  display: grid; place-items: center;
-  transition: all .2s ease;
-  flex-shrink: 0;
+.input-row textarea {
+  flex: 1; background: transparent; border: none; color: var(--text);
+  font-size: 15px; line-height: 1.5; resize: none;
+  padding: 8px 0; max-height: 140px; min-height: 24px;
 }
-.send-btn:hover { background: #7c7ff7; transform: scale(1.05); }
-.send-btn:disabled { opacity: .3; cursor: default; transform: none; }
-.send-btn svg { width: 18px; height: 18px; }
+.input-row textarea::placeholder { color: var(--text-3); }
+.send {
+  width: 36px; height: 36px; border-radius: 10px;
+  background: var(--text); color: #fff;
+  display: grid; place-items: center; flex-shrink: 0;
+  transition: opacity .15s, transform .15s;
+}
+.send:hover { opacity: .85; transform: scale(1.05); }
+.send:disabled { opacity: .25; cursor: default; transform: none; }
+.send svg { width: 16px; height: 16px; }
 
-.input-hint {
-  text-align: center;
-  color: var(--text-3);
-  font-size: 11px;
-  margin-top: 8px;
+/* ── Toolbar row (voice/keyboard) ── */
+.toolbar-row {
+  display: flex; align-items: center; gap: 4px;
+  padding: 2px 10px 4px;
+}
+.tool-btn {
+  height: 32px; padding: 0 10px; border-radius: 999px;
+  background: transparent; color: var(--text-3); font-size: 12px;
+  display: flex; align-items: center; gap: 5px;
+  transition: all .12s;
+}
+.tool-btn:hover { background: var(--bg-2); color: var(--text-2); }
+.tool-btn.active { background: var(--green-bg); color: var(--green); }
+.tool-btn svg { width: 16px; height: 16px; }
+
+.hint {
+  text-align: center; color: var(--text-3);
+  font-size: 11px; margin-top: 6px;
+  max-width: var(--max-w); margin-left: auto; margin-right: auto;
 }
 
-/* ── Header ── */
-.top-bar {
-  position: fixed;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 100%;
-  max-width: 820px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 20px;
-  z-index: 10;
-  background: linear-gradient(180deg, var(--bg) 60%, transparent);
-  pointer-events: none;
-}
-.top-bar > * { pointer-events: auto; }
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.brand-icon {
-  width: 28px; height: 28px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, var(--accent), #8b5cf6);
-  display: grid; place-items: center;
-  font-size: 14px;
-}
-.brand-name {
-  font-family: var(--font-display);
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: -.02em;
-}
-.top-actions { display: flex; gap: 6px; }
-.icon-btn {
-  width: 32px; height: 32px;
-  border-radius: 8px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--text-2);
-  cursor: pointer;
-  display: grid; place-items: center;
-  font-size: 14px;
-  transition: all .15s ease;
-}
-.icon-btn:hover { background: var(--surface-2); color: var(--text); }
-
-/* ── Settings Panel ── */
-.settings-panel {
-  position: fixed;
-  top: 52px;
-  right: calc(50% - 390px);
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 16px;
-  width: 240px;
-  z-index: 20;
+/* ── Voice Panel ── */
+.voice-panel {
   display: none;
-  animation: fadeSlide .2s ease;
-  box-shadow: 0 16px 48px rgba(0,0,0,.4);
+  max-width: var(--max-w); margin: 0 auto 8px;
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: 16px; padding: 14px;
+  animation: slideUp .2s ease;
 }
-.settings-panel.show { display: block; }
-.setting-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 12px;
+.voice-panel.show { display: block; }
+.voice-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+.voice-row:last-child { margin-bottom: 0; }
+.vsel {
+  height: 34px; border-radius: 8px;
+  background: var(--surface); border: 1px solid var(--border);
+  padding: 0 8px; font-size: 13px; color: var(--text); flex: 1; min-width: 0;
 }
-.setting-row:last-child { margin-bottom: 0; }
-.setting-label {
-  font-size: 13px;
-  color: var(--text-2);
+.mic-btn {
+  width: 100%; height: 44px; border-radius: 12px;
+  background: var(--green); color: #fff; font-size: 14px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  transition: transform .15s, box-shadow .15s;
 }
-.setting-row select, .setting-row input {
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  color: var(--text);
-  padding: 4px 8px;
-  font-size: 13px;
-  font-family: var(--font-body);
-  outline: none;
-  width: 120px;
+.mic-btn:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(16,163,127,.2); }
+.mic-btn.listening { animation: pulse 1.5s ease-in-out infinite; }
+.transcript {
+  flex: 1; min-height: 28px; border-radius: 8px;
+  background: var(--surface); border: 1px solid var(--border);
+  padding: 6px 10px; color: var(--text-2); font-size: 13px;
+  overflow: auto; line-height: 1.4;
 }
+
+/* ── Keyboard Panel ── */
+.kb-panel {
+  display: none;
+  max-width: var(--max-w); margin: 0 auto 8px;
+  background: var(--bg-2); border: 1px solid var(--border);
+  border-radius: 16px; padding: 10px;
+  animation: slideUp .2s ease;
+}
+.kb-panel.show { display: block; }
+.ime-bar {
+  display: grid; grid-template-columns: 100px 1fr;
+  gap: 6px; align-items: center; margin-bottom: 8px;
+}
+.py-readout {
+  height: 32px; border-radius: 8px;
+  background: var(--surface); border: 1px solid var(--border);
+  padding: 0 8px; color: var(--text-2); font-size: 13px; font-weight: 600;
+  display: flex; align-items: center; overflow: hidden;
+  white-space: nowrap; text-overflow: ellipsis;
+}
+.cand-list {
+  display: flex; gap: 5px; overflow-x: auto; align-items: center;
+}
+.cand {
+  height: 30px; min-width: 36px; padding: 0 10px;
+  border-radius: 8px; background: var(--surface);
+  border: 1px solid var(--border); color: var(--text-2);
+  font-size: 13px; font-weight: 600; white-space: nowrap;
+  transition: all .12s;
+}
+.cand:hover { background: var(--bg-3); }
+.cand.first { color: var(--green); background: var(--green-bg); border-color: rgba(16,163,127,.2); }
+.kbd-row { display: flex; gap: 4px; margin-bottom: 4px; }
+.kbd-row:last-child { margin-bottom: 0; }
+.kbd-row .vk { flex: 1; }
+.kbd-row.r2 { padding: 0 4%; }
+.kbd-row.r3 { padding: 0 12%; }
+.vk {
+  min-height: 40px; border-radius: 8px;
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); font-size: 14px; font-weight: 600;
+  display: grid; place-items: center;
+  transition: background .1s;
+}
+.vk:hover { background: var(--bg-3); }
+.vk.act { color: var(--green); background: var(--green-bg); border-color: rgba(16,163,127,.2); }
 
 /* ── Lightbox ── */
-.lightbox {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,.88);
-  backdrop-filter: blur(20px);
-  display: none;
-  place-items: center;
-  z-index: 100;
-  cursor: zoom-out;
+.lb {
+  position: fixed; inset: 0; background: rgba(0,0,0,.8);
+  backdrop-filter: blur(16px); display: none; place-items: center;
+  z-index: 100; cursor: zoom-out;
 }
-.lightbox.show { display: grid; }
-.lightbox img {
-  max-width: 90vw;
-  max-height: 90vh;
-  border-radius: 12px;
-  box-shadow: 0 24px 80px rgba(0,0,0,.5);
-  animation: lbIn .3s ease;
+.lb.show { display: grid; }
+.lb img {
+  max-width: 92vw; max-height: 92vh; border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.3); animation: lbIn .25s ease;
 }
 
 /* ── Toast ── */
 .toast {
-  position: fixed;
-  bottom: 100px;
-  left: 50%;
-  transform: translateX(-50%) translateY(20px);
-  opacity: 0;
-  pointer-events: none;
-  padding: 10px 18px;
-  border-radius: 999px;
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  color: var(--text);
-  font-size: 13px;
-  z-index: 50;
-  transition: .2s ease;
-  white-space: nowrap;
+  position: fixed; bottom: 90px; left: 50%;
+  transform: translateX(-50%) translateY(16px); opacity: 0;
+  pointer-events: none; padding: 8px 16px; border-radius: 999px;
+  background: var(--text); color: #fff; font-size: 13px;
+  z-index: 50; transition: .2s ease; white-space: nowrap;
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
-/* ── Error ── */
-.error-msg {
-  background: rgba(239,68,68,.08);
-  border: 1px solid rgba(239,68,68,.2);
-  border-radius: 12px;
-  padding: 12px 16px;
-  color: #f87171;
-  font-size: 13px;
-  max-width: 520px;
-}
-
 /* ── Animations ── */
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-@keyframes msgIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes imageReveal { from { opacity: 0; transform: scale(.97) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
-@keyframes bounce { 0%, 80%, 100% { transform: scale(.6); opacity: .4; } 40% { transform: scale(1); opacity: 1; } }
-@keyframes fadeSlide { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes lbIn { from { opacity: 0; transform: scale(.95); } to { opacity: 1; transform: scale(1); } }
+@keyframes msgIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes imgReveal { from { opacity: 0; transform: scale(.98) translateY(6px); } to { opacity: 1; transform: none; } }
+@keyframes dot { 0%,80%,100% { transform: scale(.5); opacity: .3; } 40% { transform: scale(1); opacity: 1; } }
+@keyframes pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.02); } }
+@keyframes slideUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes lbIn { from { opacity: 0; transform: scale(.96); } to { opacity: 1; transform: none; } }
 
 /* ── Responsive ── */
-@media (max-width: 860px) {
-  .settings-panel { right: 12px; }
-}
 @media (max-width: 600px) {
-  .empty-state h2 { font-size: 22px; }
-  .presets { gap: 6px; }
-  .preset { font-size: 12px; padding: 6px 12px; }
-  .message.user .bubble { max-width: 88%; }
-  .image-card { max-width: 100%; }
+  .empty h2 { font-size: 20px; }
+  .user-bubble { max-width: 88%; }
+  .img-card { max-width: 100%; }
+  .settings { right: 8px; }
 }
 
-/* ── Exhibit mode overrides ── */
-.exhibit .top-actions { display: none; }
-.exhibit .input-hint { display: none; }
+/* ── Exhibit ── */
+.exhibit .top-btns .tb:not(.tb-clear) { display: none; }
+.exhibit .hint { display: none; }
 .exhibit .preset { font-size: 14px; padding: 10px 18px; }
 </style>
 </head>
 <body>
 
 <div class="app">
-  <div class="top-bar">
-    <div class="brand">
-      <div class="brand-icon">✦</div>
-      <span class="brand-name">AI 画图工坊</span>
-    </div>
-    <div class="top-actions">
-      <button class="icon-btn" id="settingsBtn" title="设置">⚙</button>
-      <button class="icon-btn" id="clearBtn" title="新对话">✕</button>
-    </div>
-  </div>
-
-  <div class="settings-panel" id="settingsPanel">
-    <div class="setting-row">
-      <span class="setting-label">比例</span>
-      <select id="size">
-        <option value="1536x1024">3:2 横图</option>
-        <option value="1024x1024">1:1 方图</option>
-        <option value="1024x1536">2:3 竖图</option>
-        <option value="1920x1080">16:9 封面</option>
-      </select>
-    </div>
-    <div class="setting-row">
-      <span class="setting-label">质量</span>
-      <select id="quality">
-        <option value="high">高质量</option>
-        <option value="medium">标准</option>
-        <option value="low">快速</option>
-      </select>
-    </div>
-    <div class="setting-row">
-      <span class="setting-label">增强</span>
-      <select id="enhance">
-        <option value="on">开启</option>
-        <option value="off">关闭</option>
-      </select>
+  <div class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <div class="brand-icon">✦</div>
+        <span class="brand-text" id="brandText">AI 画图工坊</span>
+      </div>
+      <div class="top-btns">
+        <button class="tb" id="settingsBtn" title="设置">⚙</button>
+        <button class="tb tb-clear" id="clearBtn" title="新对话">✕</button>
+      </div>
     </div>
   </div>
 
-  <div class="conversation" id="conversation">
-    <div class="empty-state" id="emptyState">
-      <div class="empty-icon">✦</div>
+  <div class="settings" id="settings">
+    <div class="sr"><label>比例</label><select id="size">
+      <option value="1536x1024">3:2 横图</option>
+      <option value="1024x1024">1:1 方图</option>
+      <option value="1024x1536">2:3 竖图</option>
+      <option value="1920x1080">16:9 封面</option>
+    </select></div>
+    <div class="sr"><label>质量</label><select id="quality">
+      <option value="high">高质量</option>
+      <option value="medium">标准</option>
+      <option value="low">快速</option>
+    </select></div>
+    <div class="sr"><label>增强</label><select id="enhance">
+      <option value="on">开启</option>
+      <option value="off">关闭</option>
+    </select></div>
+  </div>
+
+  <div class="conv" id="conv">
+    <div class="empty" id="emptyState">
       <h2>用文字生成图片</h2>
       <p>描述你想生成的画面，AI 会帮你画出来。</p>
       <div class="presets">
@@ -499,35 +417,84 @@ body {
     </div>
   </div>
 
-  <div class="input-bar">
-    <div class="input-wrap">
-      <textarea id="input" rows="1" placeholder="描述你想生成的画面…"></textarea>
-      <button class="send-btn" id="sendBtn" title="生成">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
-      </button>
+  <div class="input-area">
+    <!-- Voice Panel -->
+    <div class="voice-panel" id="voicePanel">
+      <div class="voice-row">
+        <select class="vsel" id="voiceLang"><option value="zh-CN">中文</option><option value="en-US">English</option><option value="ja-JP">日本語</option></select>
+        <select class="vsel" id="voiceMode"><option value="append">追加</option><option value="replace">替换</option></select>
+      </div>
+      <div class="voice-row">
+        <button class="mic-btn" id="micBtn" type="button">
+          <span id="micIcon">🎙</span>
+          <span id="micLabel">点击开始语音</span>
+        </button>
+      </div>
+      <div class="voice-row">
+        <div class="transcript" id="transcript">语音识别结果会显示在这里。</div>
+      </div>
+      <div class="voice-row">
+        <button class="tool-btn" id="mimoBtn" type="button">MiMo 录音转写</button>
+      </div>
     </div>
-    <div class="input-hint">Enter 发送 · Shift+Enter 换行</div>
+
+    <!-- Keyboard Panel -->
+    <div class="kb-panel" id="kbPanel">
+      <div class="ime-bar">
+        <div class="py-readout" id="pyReadout">拼音</div>
+        <div class="cand-list" id="candList"></div>
+      </div>
+      <div class="kbd-row r1" data-row="qwertyuiop"></div>
+      <div class="kbd-row r2" data-row="asdfghjkl"></div>
+      <div class="kbd-row r3" data-row="zxcvbnm"></div>
+      <div class="kbd-row r4">
+        <button class="vk act" data-action="clearPinyin" type="button">清</button>
+        <button class="vk" data-action="backspace" type="button">⌫</button>
+        <button class="vk act" data-action="space" type="button">空格</button>
+        <button class="vk" data-action="punct" type="button">，</button>
+        <button class="vk act" data-action="enter" type="button">↵</button>
+      </div>
+    </div>
+
+    <div class="input-box">
+      <div class="input-row">
+        <textarea id="input" rows="1" placeholder="描述你想生成的画面…"></textarea>
+        <button class="send" id="sendBtn" title="生成">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+        </button>
+      </div>
+      <div class="toolbar-row">
+        <button class="tool-btn" id="voiceToggle" type="button">🎙 语音</button>
+        <button class="tool-btn" id="kbToggle" type="button">⌨ 键盘</button>
+      </div>
+    </div>
+    <div class="hint">Enter 发送 · Shift+Enter 换行</div>
   </div>
 </div>
 
-<div class="lightbox" id="lightbox"><img id="lbImg" alt="" /></div>
+<div class="lb" id="lb"><img id="lbImg" alt="" /></div>
 <div class="toast" id="toast"></div>
 
 <script>
-const $ = (s) => document.querySelector(s);
+const $ = (s) => document.querySelector(q => q ? document.querySelector(q) : null);
 const $$ = (s) => [...document.querySelectorAll(s)];
+const _q = (s) => document.querySelector(s);
 
-const conv = $("#conversation");
-const input = $("#input");
-const sendBtn = $("#sendBtn");
-const emptyState = $("#emptyState");
-const toast = $("#toast");
-const lightbox = $("#lightbox");
-const lbImg = $("#lbImg");
-
-let generating = false;
+const conv = _q("#conv");
+const input = _q("#input");
+const sendBtn = _q("#sendBtn");
+const toast = _q("#toast");
 const isExhibit = new URLSearchParams(location.search).has("exhibit");
 if (isExhibit) document.body.classList.add("exhibit");
+
+let generating = false;
+let recognition = null;
+let listening = false;
+let pinyinBuffer = "";
+let mediaRecorder = null;
+let isMimoRecording = false;
+let audioChunks = [];
+let autoResetTimer = null;
 
 const presetTexts = {
   "星空下的城市": "璀璨星空下的未来城市，霓虹灯映照在高楼玻璃幕墙上，赛博朋克风格，高清细节，电影感构图",
@@ -537,12 +504,32 @@ const presetTexts = {
   "未来城市夜景": "未来城市夜景，飞行汽车穿梭在摩天大楼之间，全息广告牌，科幻光影，超高细节",
 };
 
-const LOADING_MSGS = [
-  "AI 正在理解你的描述...",
-  "正在构思画面布局...",
-  "正在绘制细节...",
-  "即将完成...",
-];
+const LOADING_MSGS = ["AI 正在理解你的描述...", "正在构思画面布局...", "正在绘制细节...", "即将完成..."];
+
+const pinyinDict = {
+  ni:["你","拟","逆"], hao:["好","号","浩"], ma:["吗","码","马"],
+  wo:["我","握","窝"], men:["们","门"], shi:["是","时","式"],
+  yi:["一","已","艺"], ge:["个","格","歌"], tu:["图","兔"],
+  pian:["片","篇"], sheng:["生","声"], cheng:["成","城"],
+  hua:["画","华"], mian:["面","眠"], jian:["简","界","键"],
+  jie:["洁","界"], bai:["白","百"], ping:["屏","平"],
+  mu:["幕","目"], ke:["克","可"], ji:["机","极","级"],
+  tong:["通","同"], tou:["透","头"], gao:["高","稿"],
+  chan:["产"], pin:["品"], yin:["音"], yu:["语","域"],
+  liu:["留","流"], guang:["光"], gan:["感"], an:["安"],
+  jing:["静","净"], wen:["文","稳"], shui:["水"], feng:["风"],
+  apple:["Apple"], pingguo:["苹果"], maikefeng:["麦克风"], ye:["页"],
+  mianban:["面板"], xuanxiang:["选项"], gaoji:["高级"], tongtou:["通透"],
+  ganjing:["干净"], shengtu:["生图"], yuyin:["语音"], shuru:["输入"],
+  jiemian:["界面"], pingtai:["平台"], guangying:["光影"], baise:["白色"],
+  boli:["玻璃"], qingliang:["清亮"], jianjie:["简洁"]
+};
+
+// ── Utils ──
+function showToast(t) { toast.textContent = t; toast.classList.add("show"); clearTimeout(showToast._t); showToast._t = setTimeout(() => toast.classList.remove("show"), 2000); }
+function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+function scrollEnd() { conv.scrollTop = conv.scrollHeight; }
+function autoH() { input.style.height = "auto"; input.style.height = Math.min(input.scrollHeight, 140) + "px"; }
 
 function resolveEndpoint(path) {
   const base = location.origin.replace(/\/$/, "");
@@ -555,125 +542,66 @@ function resolveEndpoint(path) {
 }
 
 function enhance(text) {
-  if ($("#enhance").value === "off") return text;
-  const suffix = "，极简构图，纯白通透界面，柔和光感，大面积留白，精致阴影，高清细节，商业级产品视觉，无文字，无水印，无杂乱背景";
-  return text.includes("高清细节") ? text : text + suffix;
+  if (_q("#enhance").value === "off") return text;
+  const s = "，极简构图，纯白通透界面，柔和光感，大面积留白，精致阴影，高清细节，商业级产品视觉，无文字，无水印，无杂乱背景";
+  return text.includes("高清细节") ? text : text + s;
 }
 
-function showToast(text) {
-  toast.textContent = text;
-  toast.classList.add("show");
-  clearTimeout(showToast.t);
-  showToast.t = setTimeout(() => toast.classList.remove("show"), 2000);
-}
+function isValidUrl(u) { return typeof u === "string" && (u.startsWith("https://") || u.startsWith("http://") || u.startsWith("data:image/")); }
 
-function scrollToBottom() {
-  conv.scrollTop = conv.scrollHeight;
+// ── Auto Reset ──
+function scheduleReset() {
+  if (!isExhibit) return;
+  clearTimeout(autoResetTimer);
+  autoResetTimer = setTimeout(() => { _q("#clearBtn").click(); }, 60000);
 }
+input.addEventListener("input", scheduleReset);
 
-function autoResize() {
-  input.style.height = "auto";
-  input.style.height = Math.min(input.scrollHeight, 150) + "px";
-}
+// ── Messages ──
+function removeEmpty() { const e = _q("#emptyState"); if (e) e.remove(); }
 
 function addUserMsg(text) {
-  if (emptyState) emptyState.remove();
-  const div = document.createElement("div");
-  div.className = "message user";
-  div.innerHTML = `<div class="bubble">${escHtml(text)}</div>`;
-  conv.appendChild(div);
-  scrollToBottom();
+  removeEmpty();
+  const d = document.createElement("div"); d.className = "msg user";
+  d.innerHTML = `<div class="msg-inner"><div class="user-bubble">${esc(text)}</div></div>`;
+  conv.appendChild(d); scrollEnd();
 }
 
 function addGenerating() {
-  const div = document.createElement("div");
-  div.className = "message assistant";
-  div.id = "genMsg";
-  div.innerHTML = `
-    <div class="avatar">✦</div>
-    <div class="assistant-content">
-      <div class="generating">
-        <div class="gen-dots"><span></span><span></span><span></span></div>
-        <span class="gen-text" id="genText">${LOADING_MSGS[0]}</span>
-      </div>
-    </div>`;
-  conv.appendChild(div);
-  scrollToBottom();
+  const d = document.createElement("div"); d.className = "msg"; d.id = "genMsg";
+  d.innerHTML = `<div class="msg-inner"><div class="avatar ai">✦</div><div class="ai-content"><div class="gen"><div class="gen-dots"><span></span><span></span><span></span></div><span class="gen-text" id="genText">${LOADING_MSGS[0]}</span></div></div></div>`;
+  conv.appendChild(d); scrollEnd();
   let i = 0;
-  const iv = setInterval(() => {
-    i = (i + 1) % LOADING_MSGS.length;
-    const el = $("#genText");
-    if (el) el.textContent = LOADING_MSGS[i];
-  }, 3000);
-  return iv;
+  return setInterval(() => { i = (i+1) % LOADING_MSGS.length; const el = _q("#genText"); if (el) el.textContent = LOADING_MSGS[i]; }, 3000);
 }
 
-function removeGenerating() {
-  const el = $("#genMsg");
-  if (el) el.remove();
+function removeGen() { const e = _q("#genMsg"); if (e) e.remove(); }
+
+function addResult(imgUrl) {
+  const d = document.createElement("div"); d.className = "msg";
+  d.innerHTML = `<div class="msg-inner"><div class="avatar ai">✦</div><div class="ai-content"><div class="ai-label">已为你生成图片</div><div class="img-card"><img src="${imgUrl}" alt="AI 生成图片" onclick="openLb(this.src)" /><div class="img-actions"><button class="iab primary" onclick="dlImg('${imgUrl.replace(/'/g,"\\'")}')">下载</button><button class="iab" onclick="openLb(document.querySelector('.img-card:last-of-type img')?.src)">大图</button></div></div></div></div>`;
+  conv.appendChild(d); scrollEnd(); scheduleReset();
 }
 
-function addResultMsg(imgUrl) {
-  const div = document.createElement("div");
-  div.className = "message assistant";
-  div.innerHTML = `
-    <div class="avatar">✦</div>
-    <div class="assistant-content">
-      <div class="assistant-text">已为你生成图片</div>
-      <div class="image-card">
-        <img src="${imgUrl}" alt="AI 生成图片" onclick="openLightbox(this.src)" />
-        <div class="image-actions">
-          <button class="img-btn accent" onclick="downloadImg('${imgUrl.replace(/'/g, "\\'")}')">下载图片</button>
-          <button class="img-btn" onclick="openLightbox(document.querySelector('.image-card:last-of-type img')?.src)">查看大图</button>
-        </div>
-      </div>
-    </div>`;
-  conv.appendChild(div);
-  scrollToBottom();
-  scheduleReset();
+function addErr(msg) {
+  const d = document.createElement("div"); d.className = "msg";
+  d.innerHTML = `<div class="msg-inner"><div class="avatar ai">✦</div><div class="ai-content"><div class="err">${esc(msg)}</div></div></div>`;
+  conv.appendChild(d); scrollEnd();
 }
 
-function addErrorMsg(msg) {
-  const div = document.createElement("div");
-  div.className = "message assistant";
-  div.innerHTML = `
-    <div class="avatar">✦</div>
-    <div class="assistant-content">
-      <div class="error-msg">${escHtml(msg)}</div>
-    </div>`;
-  conv.appendChild(div);
-  scrollToBottom();
-}
-
-function escHtml(s) {
-  const d = document.createElement("div");
-  d.textContent = s;
-  return d.innerHTML;
-}
-
-function isValidUrl(u) {
-  return typeof u === "string" && (u.startsWith("https://") || u.startsWith("http://") || u.startsWith("data:image/"));
-}
-
+// ── API ──
 async function generateImage(prompt) {
-  const response = await fetch(resolveEndpoint("/v1/images/generations"), {
+  const r = await fetch(resolveEndpoint("/v1/images/generations"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "gpt-image-2",
-      prompt: enhance(prompt),
-      size: $("#size").value,
-      quality: $("#quality").value,
-      response_format: "url",
-      n: 1,
-    }),
+    body: JSON.stringify({ model: "gpt-image-2", prompt: enhance(prompt), size: _q("#size").value, quality: _q("#quality").value, response_format: "url", n: 1 }),
   });
-  if (!response.ok) {
-    const t = await response.text();
-    try { throw new Error(JSON.parse(t).error || `HTTP ${response.status}`); }
-    catch (e) { if (e.message) throw e; throw new Error(`请求失败 (${response.status})`); }
+  if (!r.ok) {
+    const t = await r.text();
+    try { throw new Error(JSON.parse(t).error || `HTTP ${r.status}`); }
+    catch (e) { if (e.message) throw e; throw new Error(`请求失败 (${r.status})`); }
   }
-  const data = await response.json();
+  const data = await r.json();
   const url = data?.data?.[0]?.url || data?.url || data?.image_url;
   if (url && isValidUrl(url)) return url;
   const b64 = data?.data?.[0]?.b64_json;
@@ -684,123 +612,209 @@ async function generateImage(prompt) {
 async function send() {
   const text = input.value.trim();
   if (!text || generating) return;
-  generating = true;
-  sendBtn.disabled = true;
-  input.value = "";
-  autoResize();
-
+  generating = true; sendBtn.disabled = true;
+  input.value = ""; autoH();
   addUserMsg(text);
   const iv = addGenerating();
-
   try {
     const url = await generateImage(text);
-    clearInterval(iv);
-    removeGenerating();
-    addResultMsg(url);
+    clearInterval(iv); removeGen(); addResult(url);
   } catch (err) {
-    clearInterval(iv);
-    removeGenerating();
-    const msg = err.message || "生成失败";
-    addErrorMsg(/not configured|503/i.test(msg) ? "AI 服务暂未配置，请联系管理员。" :
-                /too large|413/i.test(msg) ? "描述内容过长，请缩短后重试。" :
-                /failed|network/i.test(msg) ? "网络异常，请稍后重试。" : msg);
-  } finally {
-    generating = false;
-    sendBtn.disabled = false;
-    input.focus();
-  }
+    clearInterval(iv); removeGen();
+    addErr(/not configured|503/i.test(err.message) ? "AI 服务暂未配置" : /too large|413/i.test(err.message) ? "描述过长" : /failed|network/i.test(err.message) ? "网络异常，请重试" : err.message);
+  } finally { generating = false; sendBtn.disabled = false; input.focus(); }
 }
-
-// ── Auto Reset (exhibit) ──
-let resetTimer;
-function scheduleReset() {
-  if (!isExhibit) return;
-  clearTimeout(resetTimer);
-  resetTimer = setTimeout(() => {
-    conv.innerHTML = "";
-    const es = document.createElement("div");
-    es.className = "empty-state";
-    es.id = "emptyState";
-    es.innerHTML = `<div class="empty-icon">✦</div><h2>用文字生成图片</h2><p>描述你想生成的画面，AI 会帮你画出来。</p><div class="presets">
-      <button class="preset">星空下的城市</button><button class="preset">可爱的机器猫</button><button class="preset">赛博朋克少女</button><button class="preset">水墨山水画</button><button class="preset">未来城市夜景</button></div>`;
-    conv.appendChild(es);
-    bindPresets();
-  }, 60000);
-}
-conv.addEventListener("click", scheduleReset);
-input.addEventListener("input", scheduleReset);
 
 // ── Download ──
-async function downloadImg(src) {
+async function dlImg(src) {
   try {
-    if (src.startsWith("data:")) {
-      const a = document.createElement("a");
-      a.href = src; a.download = `image2-${Date.now()}.png`; a.click();
-    } else {
-      const r = await fetch(src);
-      const b = await r.blob();
-      const u = URL.createObjectURL(b);
-      const a = document.createElement("a");
-      a.href = u; a.download = `image2-${Date.now()}.png`; a.click();
-      setTimeout(() => URL.revokeObjectURL(u), 5000);
-    }
+    if (src.startsWith("data:")) { const a = document.createElement("a"); a.href = src; a.download = `image2-${Date.now()}.png`; a.click(); }
+    else { const r = await fetch(src); const b = await r.blob(); const u = URL.createObjectURL(b); const a = document.createElement("a"); a.href = u; a.download = `image2-${Date.now()}.png`; a.click(); setTimeout(() => URL.revokeObjectURL(u), 5000); }
   } catch { window.open(src, "_blank"); }
 }
 
 // ── Lightbox ──
-window.openLightbox = (src) => { lbImg.src = src; lightbox.classList.add("show"); };
-lightbox.onclick = () => lightbox.classList.remove("show");
+window.openLb = (src) => { _q("#lbImg").src = src; _q("#lb").classList.add("show"); };
+_q("#lb").onclick = () => _q("#lb").classList.remove("show");
+
+// ── Pinyin Keyboard ──
+function getCandidates() {
+  if (!pinyinBuffer) return ["语音","生图","界面","留白","高级"];
+  const exact = pinyinDict[pinyinBuffer] || [];
+  const fuzzy = Object.entries(pinyinDict).filter(([k]) => k.startsWith(pinyinBuffer) && k !== pinyinBuffer).flatMap(([,v]) => v.slice(0,1));
+  return [...new Set([...exact, ...fuzzy, pinyinBuffer])].slice(0,6);
+}
+
+function renderCand() {
+  _q("#pyReadout").textContent = pinyinBuffer || "拼音";
+  const list = _q("#candList"); list.innerHTML = "";
+  getCandidates().forEach((w, i) => {
+    const b = document.createElement("button"); b.type = "button";
+    b.className = "cand" + (i === 0 ? " first" : "");
+    b.textContent = w;
+    b.onclick = () => { insertText(w); pinyinBuffer = ""; renderCand(); };
+    list.appendChild(b);
+  });
+}
+
+function insertText(t) {
+  const s = input.selectionStart ?? input.value.length;
+  const e = input.selectionEnd ?? input.value.length;
+  input.value = input.value.slice(0, s) + t + input.value.slice(e);
+  input.setSelectionRange(s + t.length, s + t.length);
+  autoH(); input.focus(); scheduleReset();
+}
+
+function removeBack() {
+  const s = input.selectionStart ?? input.value.length;
+  const e = input.selectionEnd ?? input.value.length;
+  if (s !== e) { input.value = input.value.slice(0, s) + input.value.slice(e); input.setSelectionRange(s, s); }
+  else if (s > 0) { input.value = input.value.slice(0, s-1) + input.value.slice(s); input.setSelectionRange(s-1, s-1); }
+  autoH(); input.focus();
+}
+
+function kbAction(a) {
+  if (a === "clearPinyin") pinyinBuffer = "";
+  else if (a === "backspace") { if (pinyinBuffer) pinyinBuffer = pinyinBuffer.slice(0,-1); else removeBack(); }
+  else if (a === "space") { if (pinyinBuffer) { insertText(getCandidates()[0]); pinyinBuffer = ""; } else insertText(" "); }
+  else if (a === "punct") insertText("，");
+  else if (a === "enter") { if (pinyinBuffer) { insertText(getCandidates()[0]); pinyinBuffer = ""; } insertText("\n"); }
+  renderCand();
+}
+
+_q(".kb-panel").addEventListener("click", (e) => { const a = e.target?.dataset?.action; if (a) kbAction(a); });
+document.querySelectorAll(".kbd-row[data-row]").forEach(row => {
+  row.dataset.row.split("").forEach(ch => {
+    const b = document.createElement("button"); b.type = "button"; b.className = "vk"; b.textContent = ch;
+    b.onclick = () => { pinyinBuffer += ch; renderCand(); };
+    row.appendChild(b);
+  });
+});
+renderCand();
+
+// ── Voice ──
+function setupSpeech() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) { showToast("浏览器不支持语音识别"); return false; }
+  recognition = new SR(); recognition.continuous = false; recognition.interimResults = true;
+  recognition.lang = _q("#voiceLang").value;
+  recognition.onstart = () => { listening = true; _q("#micBtn").classList.add("listening"); _q("#micLabel").textContent = "正在聆听..."; };
+  recognition.onresult = (e) => {
+    let inter = "", fin = "";
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      const t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) fin += t; else inter += t;
+    }
+    _q("#transcript").textContent = fin || inter || "识别中...";
+    if (fin) {
+      const cleaned = fin.trim();
+      if (_q("#voiceMode").value === "replace") { input.value = cleaned; }
+      else { const cur = input.value.trim(); input.value = cur ? cur + "，" + cleaned : cleaned; }
+      autoH();
+    }
+  };
+  recognition.onerror = () => showToast("语音识别出错");
+  recognition.onend = () => { listening = false; _q("#micBtn").classList.remove("listening"); _q("#micLabel").textContent = "点击开始语音"; };
+  return true;
+}
+
+_q("#micBtn").onclick = () => {
+  if (!recognition && !setupSpeech()) return;
+  recognition.lang = _q("#voiceLang").value;
+  if (listening) recognition.stop(); else recognition.start();
+};
+
+// ── MiMo ──
+async function transcribeMimo(blob) {
+  const reader = new FileReader();
+  const dataUrl = await new Promise((res, rej) => { reader.onload = () => res(reader.result); reader.onerror = rej; reader.readAsDataURL(blob); });
+  const r = await fetch(resolveEndpoint("/stt/transcribe"), {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ audioData: dataUrl, lang: _q("#voiceLang").value }),
+  });
+  if (!r.ok) throw new Error("转写失败");
+  const d = await r.json();
+  const t = String(d.text || "").trim();
+  if (!t) throw new Error("未返回内容");
+  return t;
+}
+
+_q("#mimoBtn").onclick = async () => {
+  if (isMimoRecording && mediaRecorder) { mediaRecorder.stop(); return; }
+  if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") { showToast("不支持录音"); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    audioChunks = [];
+    mediaRecorder = new MediaRecorder(stream);
+    mediaRecorder.ondataavailable = (e) => { if (e.data?.size) audioChunks.push(e.data); };
+    mediaRecorder.onstop = async () => {
+      isMimoRecording = false; _q("#mimoBtn").textContent = "MiMo 录音转写";
+      stream.getTracks().forEach(t => t.stop());
+      const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || "audio/webm" });
+      if (!blob.size) { showToast("未录到音频"); return; }
+      _q("#transcript").textContent = "转写中...";
+      try {
+        const text = await transcribeMimo(blob);
+        _q("#transcript").textContent = text;
+        const cur = input.value.trim();
+        input.value = cur ? cur + "，" + text : text;
+        autoH(); showToast("转写完成");
+      } catch (e) { _q("#transcript").textContent = "转写失败"; showToast("转写失败"); }
+    };
+    mediaRecorder.start(); isMimoRecording = true;
+    _q("#mimoBtn").textContent = "停止并转写";
+    _q("#transcript").textContent = "录音中...";
+  } catch { showToast("无法启动录音"); }
+};
+
+// ── Panel Toggles ──
+_q("#voiceToggle").onclick = () => {
+  const vp = _q("#voicePanel"), kp = _q("#kbPanel"), vt = _q("#voiceToggle"), kt = _q("#kbToggle");
+  const show = !vp.classList.contains("show");
+  vp.classList.toggle("show", show); kp.classList.remove("show");
+  vt.classList.toggle("active", show); kt.classList.remove("active");
+};
+_q("#kbToggle").onclick = () => {
+  const vp = _q("#voicePanel"), kp = _q("#kbPanel"), vt = _q("#voiceToggle"), kt = _q("#kbToggle");
+  const show = !kp.classList.contains("show");
+  kp.classList.toggle("show", show); vp.classList.remove("show");
+  kt.classList.toggle("active", show); vt.classList.remove("active");
+};
 
 // ── Events ──
 sendBtn.onclick = send;
-input.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
-});
-input.addEventListener("input", autoResize);
+input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } });
+input.addEventListener("input", autoH);
 
-$("#settingsBtn").onclick = (e) => {
-  e.stopPropagation();
-  $("#settingsPanel").classList.toggle("show");
-};
-document.addEventListener("click", (e) => {
-  if (!$("#settingsPanel").contains(e.target) && e.target !== $("#settingsBtn")) {
-    $("#settingsPanel").classList.remove("show");
-  }
-});
-$("#clearBtn").onclick = () => {
+_q("#settingsBtn").onclick = (e) => { e.stopPropagation(); _q("#settings").classList.toggle("show"); };
+document.addEventListener("click", (e) => { if (!_q("#settings").contains(e.target) && e.target !== _q("#settingsBtn")) _q("#settings").classList.remove("show"); });
+
+_q("#clearBtn").onclick = () => {
   conv.innerHTML = "";
-  const es = document.createElement("div");
-  es.className = "empty-state"; es.id = "emptyState";
-  es.innerHTML = `<div class="empty-icon">✦</div><h2>用文字生成图片</h2><p>描述你想生成的画面，AI 会帮你画出来。</p><div class="presets">
-    <button class="preset">星空下的城市</button><button class="preset">可爱的机器猫</button><button class="preset">赛博朋克少女</button><button class="preset">水墨山水画</button><button class="preset">未来城市夜景</button></div>`;
-  conv.appendChild(es);
-  bindPresets();
-  showToast("已清空对话");
+  const es = document.createElement("div"); es.className = "empty"; es.id = "emptyState";
+  es.innerHTML = '<h2>用文字生成图片</h2><p>描述你想生成的画面，AI 会帮你画出来。</p><div class="presets"><button class="preset">星空下的城市</button><button class="preset">可爱的机器猫</button><button class="preset">赛博朋克少女</button><button class="preset">水墨山水画</button><button class="preset">未来城市夜景</button></div>';
+  conv.appendChild(es); bindPresets(); showToast("已清空");
 };
 
 function bindPresets() {
-  $$(".preset").forEach((btn) => {
-    btn.onclick = () => {
-      const key = btn.textContent.trim();
-      input.value = presetTexts[key] || key;
-      autoResize();
-      input.focus();
-      send();
-    };
+  $$(".preset").forEach(b => {
+    b.onclick = () => { input.value = presetTexts[b.textContent.trim()] || b.textContent.trim(); autoH(); input.focus(); send(); };
   });
 }
 bindPresets();
 
-// ── Load config ──
+// ── Config ──
 (async () => {
   try {
     const r = await fetch(resolveEndpoint("/config"));
-    if (r.ok) {
-      const c = await r.json();
-      if (c.model) $(".brand-name").textContent = `AI 画图工坊 · ${c.model}`;
-    }
+    if (r.ok) { const c = await r.json(); if (c.model) _q("#brandText").textContent = `AI 画图工坊 · ${c.model}`; }
   } catch {}
 })();
+
+if (isExhibit) {
+  const vl = _q("#voiceLang"); if (vl) { vl.value = "zh-CN"; vl.disabled = true; }
+  const vm = _q("#voiceMode"); if (vm) { vm.value = "append"; vm.disabled = true; }
+}
 
 input.focus();
 </script>
