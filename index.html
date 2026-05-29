@@ -21,6 +21,7 @@
   --radius: 16px;
   --radius-lg: 20px;
   --max-w: 768px;
+  --sidebar-w: 280px;
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans SC", "PingFang SC", "Microsoft YaHei", Helvetica, sans-serif;
 }
 
@@ -46,9 +47,58 @@ textarea, input, select { font-family: inherit; outline: none; }
   height: 100vh;
 }
 
+/* ── Sidebar ── */
+.sidebar {
+  position: fixed; top: 0; left: 0; bottom: 0;
+  width: var(--sidebar-w);
+  background: var(--bg-2); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; padding: 12px; gap: 10px;
+  z-index: 20; transform: translateX(-100%); transition: transform .18s ease;
+}
+.sidebar.open { transform: none; }
+.sidebar-head { display: flex; gap: 8px; }
+.sidebar-head input {
+  flex: 1; height: 34px; border-radius: 8px;
+  background: var(--surface); border: 1px solid var(--border);
+  padding: 0 10px; font-size: 13px; color: var(--text);
+}
+.sidebar-head button, .new-conv-btn {
+  height: 34px; border-radius: 8px; background: var(--text); color: #fff;
+  font-size: 13px; padding: 0 12px;
+}
+.conv-list {
+  flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 4px;
+  scrollbar-width: thin; scrollbar-color: var(--bg-3) transparent;
+}
+.conv-list::-webkit-scrollbar { width: 6px; }
+.conv-list::-webkit-scrollbar-thumb { background: var(--bg-3); border-radius: 3px; }
+.conv-item {
+  width: 100%; text-align: left; border-radius: 8px; padding: 8px 10px;
+  background: transparent; border: 1px solid transparent; color: var(--text);
+  font-size: 13px; line-height: 1.4; display: flex; align-items: flex-start; gap: 8px;
+}
+.conv-item:hover { background: var(--surface-hover); }
+.conv-item.active { background: var(--surface); border-color: var(--border); }
+.conv-item .conv-text { flex: 1; min-width: 0; }
+.conv-item .conv-title { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.conv-item .conv-time { display: block; color: var(--text-3); font-size: 11px; margin-top: 2px; }
+.conv-item .conv-del {
+  width: 24px; height: 24px; border-radius: 6px;
+  background: transparent; color: var(--text-3); font-size: 14px;
+  display: grid; place-items: center; flex-shrink: 0;
+}
+.conv-item .conv-del:hover { background: var(--bg-3); color: var(--text); }
+.conv-empty { color: var(--text-3); font-size: 13px; padding: 16px; text-align: center; }
+.sidebar-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.25); z-index: 15; display: none;
+}
+@media (max-width: 600px) {
+  .sidebar.open ~ .sidebar-overlay { display: block; }
+}
+
 /* ── Top Bar ── */
 .topbar {
-  position: fixed; top: 0; left: 0; right: 0;
+  position: fixed; top: 0; left: var(--sidebar-w); right: 0;
   height: 52px;
   display: flex; align-items: center; justify-content: center;
   background: var(--bg);
@@ -357,6 +407,8 @@ textarea, input, select { font-family: inherit; outline: none; }
 
 /* ── Responsive ── */
 @media (max-width: 600px) {
+  .topbar { left: 0; }
+  .sidebar { width: 80vw; max-width: 300px; }
   .empty h2 { font-size: 20px; }
   .user-bubble { max-width: 88%; }
   .img-card { max-width: 100%; }
@@ -371,6 +423,17 @@ textarea, input, select { font-family: inherit; outline: none; }
 </head>
 <body>
 
+<aside class="sidebar open" id="sidebar">
+  <div class="sidebar-head">
+    <input id="sidebarSearch" type="search" placeholder="搜索历史对话..." />
+    <button id="newConvBtn" type="button">新对话</button>
+  </div>
+  <div class="conv-list" id="convList">
+    <div class="conv-empty">还没有历史对话。</div>
+  </div>
+</aside>
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+
 <div class="app">
   <div class="topbar">
     <div class="topbar-inner">
@@ -379,6 +442,7 @@ textarea, input, select { font-family: inherit; outline: none; }
         <span class="brand-text" id="brandText">AI 画图工坊</span>
       </div>
       <div class="top-btns">
+        <button class="tb" id="sidebarToggle" title="历史对话">☰</button>
         <button class="tb" id="settingsBtn" title="设置">⚙</button>
         <button class="tb tb-clear" id="clearBtn" title="新对话">✕</button>
       </div>
@@ -487,7 +551,7 @@ const toast = _q("#toast");
 const isExhibit = new URLSearchParams(location.search).has("exhibit");
 if (isExhibit) document.body.classList.add("exhibit");
 
-let generating = false;
+const pendingGens = new Map(); // convId -> { prompt, intervalId }
 let recognition = null;
 let listening = false;
 let pinyinBuffer = "";
@@ -504,7 +568,7 @@ const presetTexts = {
   "未来城市夜景": "未来城市夜景，飞行汽车穿梭在摩天大楼之间，全息广告牌，科幻光影，超高细节",
 };
 
-const LOADING_MSGS = ["AI 正在理解你的描述...", "正在构思画面布局...", "正在绘制细节...", "即将完成..."];
+const LOADING_MSGS = ["AI 正在理解你的描述（预计需要60秒）...", "正在构思画面布局...", "正在绘制细节...", "即将完成..."];
 
 const pinyinDict = {
   // A
@@ -596,11 +660,12 @@ input.addEventListener("input", scheduleReset);
 // ── Messages ──
 function removeEmpty() { const e = _q("#emptyState"); if (e) e.remove(); }
 
-function addUserMsg(text) {
+function addUserMsg(text, record = true) {
   removeEmpty();
   const d = document.createElement("div"); d.className = "msg user";
   d.innerHTML = `<div class="msg-inner"><div class="user-bubble">${esc(text)}</div></div>`;
   conv.appendChild(d); scrollEnd();
+  if (record) recordMessage("user", { text });
 }
 
 function addGenerating() {
@@ -613,16 +678,18 @@ function addGenerating() {
 
 function removeGen() { const e = _q("#genMsg"); if (e) e.remove(); }
 
-function addResult(imgUrl) {
+function addResult(imgUrl, record = true) {
   const d = document.createElement("div"); d.className = "msg";
   d.innerHTML = `<div class="msg-inner"><div class="avatar ai">✦</div><div class="ai-content"><div class="ai-label">已为你生成图片</div><div class="img-card"><img src="${imgUrl}" alt="AI 生成图片" onclick="openLb(this.src)" /><div class="img-actions"><button class="iab primary" onclick="dlImg('${imgUrl.replace(/'/g,"\\'")}')">下载</button><button class="iab" onclick="openLb(document.querySelector('.img-card:last-of-type img')?.src)">大图</button></div></div></div></div>`;
   conv.appendChild(d); scrollEnd(); scheduleReset();
+  if (record) recordMessage("image", { url: imgUrl });
 }
 
-function addErr(msg) {
+function addErr(msg, record = true) {
   const d = document.createElement("div"); d.className = "msg";
   d.innerHTML = `<div class="msg-inner"><div class="avatar ai">✦</div><div class="ai-content"><div class="err">${esc(msg)}</div></div></div>`;
   conv.appendChild(d); scrollEnd();
+  if (record) recordMessage("error", { text: msg });
 }
 
 // ── API ──
@@ -647,18 +714,43 @@ async function generateImage(prompt) {
 
 async function send() {
   const text = input.value.trim();
-  if (!text || generating) return;
-  generating = true; sendBtn.disabled = true;
+  if (!text) return;
+  const convId = currentConvId;
+  if (!convId) return;
+  if (pendingGens.has(convId)) { showToast("当前对话正在生成中"); return; }
+
   input.value = ""; autoH();
   addUserMsg(text);
-  const iv = addGenerating();
+  pendingGens.set(convId, { prompt: text, intervalId: null });
+  updateSendBtnState();
+
+  if (convId === currentConvId) {
+    const iv = addGenerating();
+    const gen = pendingGens.get(convId);
+    if (gen) gen.intervalId = iv;
+  }
+
   try {
     const url = await generateImage(text);
-    clearInterval(iv); removeGen(); addResult(url);
+    const gen = pendingGens.get(convId);
+    if (gen?.intervalId) clearInterval(gen.intervalId);
+    pendingGens.delete(convId);
+    recordMessage("image", { url }, convId);
+    if (convId === currentConvId) { removeGen(); addResult(url, false); }
   } catch (err) {
-    clearInterval(iv); removeGen();
-    addErr(/not configured|503/i.test(err.message) ? "AI 服务暂未配置" : /too large|413/i.test(err.message) ? "描述过长" : /failed|network/i.test(err.message) ? "网络异常，请重试" : err.message);
-  } finally { generating = false; sendBtn.disabled = false; input.focus(); }
+    const gen = pendingGens.get(convId);
+    if (gen?.intervalId) clearInterval(gen.intervalId);
+    pendingGens.delete(convId);
+    const errMsg = /not configured|503/i.test(err.message) ? "AI 服务暂未配置" : /too large|413/i.test(err.message) ? "描述过长" : /failed|network/i.test(err.message) ? "网络异常，请重试" : err.message;
+    recordMessage("error", { text: errMsg }, convId);
+    if (convId === currentConvId) { removeGen(); addErr(errMsg, false); }
+  }
+  updateSendBtnState();
+  if (convId === currentConvId) input.focus();
+}
+
+function updateSendBtnState() {
+  sendBtn.disabled = pendingGens.has(currentConvId);
 }
 
 // ── Download ──
@@ -842,15 +934,20 @@ sendBtn.onclick = send;
 input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } });
 input.addEventListener("input", autoH);
 
-_q("#settingsBtn").onclick = (e) => { e.stopPropagation(); _q("#settings").classList.toggle("show"); };
+_q("#settingsBtn").onclick = (e) => {
+  e.stopPropagation();
+  const panel = _q("#settings");
+  const show = !panel.classList.contains("show");
+  panel.classList.toggle("show", show);
+  if (show) {
+    const btnRect = e.currentTarget.getBoundingClientRect();
+    panel.style.top = `${btnRect.bottom + 6}px`;
+    panel.style.right = `${Math.max(8, window.innerWidth - btnRect.right)}px`;
+  }
+};
 document.addEventListener("click", (e) => { if (!_q("#settings").contains(e.target) && e.target !== _q("#settingsBtn")) _q("#settings").classList.remove("show"); });
 
-_q("#clearBtn").onclick = () => {
-  conv.innerHTML = "";
-  const es = document.createElement("div"); es.className = "empty"; es.id = "emptyState";
-  es.innerHTML = '<h2>用文字生成图片</h2><p>描述你想生成的画面，AI 会帮你画出来。</p><div class="presets"><button class="preset">星空下的城市</button><button class="preset">可爱的机器猫</button><button class="preset">赛博朋克少女</button><button class="preset">水墨山水画</button><button class="preset">未来城市夜景</button></div>';
-  conv.appendChild(es); bindPresets(); showToast("已清空");
-};
+_q("#clearBtn").onclick = () => { createConversation(); };
 
 function bindPresets() {
   $$(".preset").forEach(b => {
@@ -858,6 +955,156 @@ function bindPresets() {
   });
 }
 bindPresets();
+
+// ── Conversation History ──
+let conversations = [];
+let currentConvId = null;
+
+function uid() {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2,8)}`;
+}
+
+function getSettingsSnapshot() {
+  return { size: _q("#size").value, quality: _q("#quality").value, enhance: _q("#enhance").value };
+}
+
+function loadConversations() {
+  try { conversations = JSON.parse(localStorage.getItem("image2_conversations") || "[]"); }
+  catch { conversations = []; }
+}
+
+function saveConversations() {
+  localStorage.setItem("image2_conversations", JSON.stringify(conversations));
+}
+
+function renderConvHTML() {
+  const q = (_q("#sidebarSearch").value || "").trim().toLowerCase();
+  const list = _q("#convList");
+  const filtered = conversations.slice().sort((a,b) => (b.updatedAt||0)-(a.updatedAt||0))
+    .filter(c => !q || (c.title||"").toLowerCase().includes(q) || (c.lastUserText||"").toLowerCase().includes(q));
+  list.innerHTML = "";
+  if (!filtered.length) {
+    const empty = document.createElement("div");
+    empty.className = "conv-empty";
+    empty.textContent = q ? "没有匹配的历史对话。" : "还没有历史对话。";
+    list.appendChild(empty);
+    return;
+  }
+  filtered.forEach(c => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = `conv-item${c.id === currentConvId ? " active" : ""}`;
+    const title = c.title || c.lastUserText || "新对话";
+    const time = new Date(c.updatedAt || c.createdAt || Date.now()).toLocaleString("zh-CN", { hour12: false });
+    btn.innerHTML = `<div class="conv-text"><span class="conv-title">${esc(title)}</span><span class="conv-time">${esc(time)}</span></div><div class="conv-del" data-del="${c.id}">✕</div>`;
+    btn.onclick = (e) => { if (!e.target.closest(".conv-del")) { loadConversation(c.id); } };
+    list.appendChild(btn);
+  });
+}
+
+function createConversation() {
+  const settings = getSettingsSnapshot();
+  const convObj = { id: uid(), title: "", createdAt: Date.now(), updatedAt: Date.now(), settings, messages: [], lastUserText: "" };
+  conversations.unshift(convObj);
+  currentConvId = convObj.id;
+  saveConversations();
+  renderConvToDOM();
+  renderConvHTML();
+  showToast("已创建新对话");
+}
+
+function loadConversation(id) {
+  const target = conversations.find(c => c.id === id);
+  if (!target) return;
+  currentConvId = id;
+  renderConvToDOM();
+  renderConvHTML();
+}
+
+function deleteConversation(id) {
+  const idx = conversations.findIndex(c => c.id === id);
+  if (idx === -1) return;
+  conversations.splice(idx, 1);
+  saveConversations();
+  if (currentConvId === id) {
+    if (conversations.length) { currentConvId = conversations[0].id; renderConvToDOM(); }
+    else createConversation();
+  }
+  renderConvHTML();
+  showToast("已删除对话");
+}
+
+function ensureCurrentConversation() {
+  if (!currentConvId || !conversations.find(c => c.id === currentConvId)) createConversation();
+}
+
+function recordMessage(type, payload, targetConvId) {
+  const cid = targetConvId || currentConvId;
+  if (!cid) return;
+  const cur = conversations.find(c => c.id === cid);
+  if (!cur) return;
+  cur.messages.push({ type, ...payload });
+  if (type === "user") {
+    cur.lastUserText = payload.text || cur.lastUserText || "";
+    if (!cur.title) cur.title = (payload.text || "").slice(0, 32);
+  }
+  cur.updatedAt = Date.now();
+  cur.settings = getSettingsSnapshot();
+  saveConversations();
+  renderConvHTML();
+}
+
+function buildEmptyHTML() {
+  return '<div class="empty" id="emptyState"><h2>用文字生成图片</h2><p>描述你想生成的画面，AI 会帮你画出来。</p><div class="presets"><button class="preset">星空下的城市</button><button class="preset">可爱的机器猫</button><button class="preset">赛博朋克少女</button><button class="preset">水墨山水画</button><button class="preset">未来城市夜景</button></div></div>';
+}
+
+function renderConvToDOM() {
+  conv.innerHTML = "";
+  const cur = conversations.find(c => c.id === currentConvId);
+  if (cur) {
+    if (cur.settings) {
+      if (cur.settings.size) _q("#size").value = cur.settings.size;
+      if (cur.settings.quality) _q("#quality").value = cur.settings.quality;
+      if (cur.settings.enhance) _q("#enhance").value = cur.settings.enhance;
+    }
+    if (!cur.messages.length) { conv.innerHTML = buildEmptyHTML(); }
+    else { cur.messages.forEach(m => {
+      if (m.type === "user") addUserMsg(m.text || "", false);
+      else if (m.type === "image") addResult(m.url || "", false);
+      else if (m.type === "error") addErr(m.text || "", false);
+    }); }
+  } else { conv.innerHTML = buildEmptyHTML(); }
+  bindPresets();
+  // Clear any stale generating interval before clearing DOM
+  for (const [cid, gen] of pendingGens) {
+    if (gen.intervalId) { clearInterval(gen.intervalId); gen.intervalId = null; }
+  }
+  if (pendingGens.has(currentConvId)) {
+    const iv = addGenerating();
+    pendingGens.get(currentConvId).intervalId = iv;
+  }
+  updateSendBtnState();
+}
+
+function toggleSidebar(force) {
+  const sb = _q("#sidebar");
+  const next = typeof force === "boolean" ? force : !sb.classList.contains("open");
+  sb.classList.toggle("open", next);
+}
+function closeSidebar() { _q("#sidebar").classList.remove("open"); }
+
+_q("#sidebarToggle").onclick = () => toggleSidebar();
+_q("#sidebarOverlay").onclick = closeSidebar;
+_q("#newConvBtn").onclick = () => { createConversation(); };
+_q("#sidebarSearch").addEventListener("input", renderConvHTML);
+_q("#convList").addEventListener("click", (e) => {
+  const del = e.target.closest(".conv-del");
+  if (del && del.dataset.del) deleteConversation(del.dataset.del);
+});
+
+loadConversations();
+if (!conversations.length) createConversation();
+else loadConversation(conversations[0].id);
 
 // ── Config ──
 (async () => {
