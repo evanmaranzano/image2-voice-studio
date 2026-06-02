@@ -1,11 +1,15 @@
-const DEFAULT_BASE_URL = "https://www.packyapi.com/v1";
+const DEFAULT_BASE_URL = "";
 const DEFAULT_MIMO_BASE_URL = "https://token-plan-cn.xiaomimimo.com/v1";
 const DEFAULT_MIMO_MODEL = "MiMo-V2-Omni";
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const ALLOWED_API_PATHS = new Set(["/v1/images/generations"]);
+const MAX_PROMPT_CHARS = 4000;
 const ALLOWED_ORIGINS = "ALLOWED_ORIGINS";
 const STT_PATH = "/stt/transcribe";
 const ALLOWED_LANGS = new Set(["zh-CN", "en-US", "ja-JP", "zh-TW", "ko-KR", "fr-FR", "de-DE", "es-ES"]);
+
+// CQ-09: shared pure utilities — keep in sync with serve.py
+import { buildUpstreamUrl, parseAudioDataUrl, cleanText, extractTranscript, normalizeMimoModel } from "./shared/utils.js";
 
 export default {
   async fetch(request, env) {
@@ -50,14 +54,25 @@ async function proxyImageApi(request, env, url) {
     return json({ error: "request body is too large" }, 413, request, env);
   }
 
+  let body;
+  try {
+    body = await request.json();
+  } catch {
+    return json({ error: "invalid JSON body" }, 400, request, env);
+  }
+
+  if (typeof body.prompt !== "string" || body.prompt.length > MAX_PROMPT_CHARS) {
+    return json({ error: `prompt must be a string of at most ${MAX_PROMPT_CHARS} characters` }, 400, request, env);
+  }
+
   const upstream = await fetch(buildUpstreamUrl(env.OPENAI_BASE_URL || DEFAULT_BASE_URL, url.pathname), {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
-      "Content-Type": request.headers.get("content-type") || "application/json",
+      "Content-Type": "application/json",
       "User-Agent": "Mozilla/5.0 Image2VoiceStudio/1.0",
     },
-    body: request.body,
+    body: JSON.stringify(body),
   });
 
   return new Response(upstream.body, {
@@ -118,7 +133,7 @@ async function proxyStt(request, env) {
           content: [
             {
               type: "text",
-              text: `请把这段音频转写为纯文本，只返回转写内容。音频 MIME 类型：${audio.mimeType}。优先按 ${language} 识别。`,
+              text: `请把这段音频转写为纯文本，只返回转写内容。音频 MIME 类型：${audio.mimeType.split(";")[0].trim()}。优先按 ${language} 识别。`,
             },
             {
               type: "input_audio",
@@ -166,77 +181,6 @@ function parseAllowedOrigins(env) {
 function isOriginAllowed(origin, env) {
   if (!origin) return true;
   return parseAllowedOrigins(env).includes(origin.replace(/\/$/, ""));
-}
-
-function buildUpstreamUrl(baseUrl, path) {
-  const base = String(baseUrl || DEFAULT_BASE_URL).replace(/\/$/, "");
-  if (base.endsWith("/v1") && path.startsWith("/v1/")) {
-    return `${base}${path.slice(3)}`;
-  }
-  return `${base}${path}`;
-}
-
-function parseAudioDataUrl(dataUrl) {
-  if (!dataUrl.startsWith("data:")) throw new Error("audioData must be a data URL");
-  const commaIndex = dataUrl.indexOf(",");
-  if (commaIndex < 0) throw new Error("audioData is missing base64 data");
-  const header = dataUrl.slice(5, commaIndex);
-  const data = dataUrl.slice(commaIndex + 1);
-  const parts = header.split(";").map((part) => part.trim().toLowerCase()).filter(Boolean);
-  const mimeType = parts[0] || "";
-  if (!mimeType.startsWith("audio/")) throw new Error("audioData must be an audio data URL");
-  if (!parts.slice(1).includes("base64")) throw new Error("audioData must be base64 encoded");
-  if (!data) throw new Error("audioData is empty");
-
-  const byteLength = Math.floor((data.length * 3) / 4) - (data.endsWith("==") ? 2 : data.endsWith("=") ? 1 : 0);
-  const subtype = mimeType.split("/")[1].split("+")[0];
-  const formatMap = {
-    mpeg: "mp3",
-    mp3: "mp3",
-    wav: "wav",
-    "x-wav": "wav",
-    wave: "wav",
-    webm: "webm",
-    ogg: "ogg",
-    mp4: "mp4",
-    m4a: "m4a",
-  };
-  return { mimeType, format: formatMap[subtype] || subtype, data, byteLength };
-}
-
-function cleanText(value) {
-  if (typeof value === "string") return value.trim();
-  if (Array.isArray(value)) return value.map(cleanText).filter(Boolean).join("\n").trim();
-  if (value && typeof value === "object") {
-    return cleanText(value.text) || cleanText(value.transcript) || cleanText(value.content) || cleanText(value.reasoning_content);
-  }
-  return "";
-}
-
-function extractTranscript(data) {
-  const direct = cleanText(data?.text) || cleanText(data?.transcript) || cleanText(data?.output_text);
-  if (direct) return direct;
-  if (Array.isArray(data?.choices)) {
-    for (const choice of data.choices) {
-      const content = choice?.message?.content;
-      if (typeof content === "string") { const t = content.trim(); if (t) return t; }
-      if (Array.isArray(content)) {
-        for (const part of content) {
-          const t = cleanText(part?.text) || cleanText(part?.transcript);
-          if (t) return t;
-        }
-      }
-      const rc = cleanText(choice?.message?.reasoning_content);
-      if (rc) return rc;
-      const ct = cleanText(choice?.text);
-      if (ct) return ct;
-    }
-  }
-  return cleanText(data?.output);
-}
-
-function normalizeMimoModel(model) {
-  return String(model).toLowerCase() === "mimo-v2-omni" ? "mimo-v2-omni" : model;
 }
 
 function rejectDisallowedOrigin(request, env) {

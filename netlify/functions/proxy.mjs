@@ -1,12 +1,16 @@
-const DEFAULT_BASE_URL = "https://api.change2pro.com";
+const DEFAULT_BASE_URL = "";
 const DEFAULT_MODEL = "gpt-image-2";
 const DEFAULT_MIMO_BASE_URL = "https://token-plan-cn.xiaomimimo.com/v1";
 const DEFAULT_MIMO_MODEL = "MiMo-V2-Omni";
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+const MAX_PROMPT_CHARS = 4000;
 const MAX_STT_BODY_BYTES = MAX_UPLOAD_BYTES * 2;
 const IMAGE_PATH = "/v1/images/generations";
 const STT_PATH = "/stt/transcribe";
 const ALLOWED_LANGS = new Set(["zh-CN", "en-US", "ja-JP", "zh-TW", "ko-KR", "fr-FR", "de-DE", "es-ES"]);
+
+// CQ-09: shared pure utilities — keep in sync with serve.py
+import { buildUpstreamUrl, parseAudioDataUrl, cleanText, extractTranscript, normalizeMimoModel } from "../../shared/utils.js";
 
 export default async (req) => {
   const url = new URL(req.url);
@@ -68,6 +72,10 @@ async function proxyImage(req) {
     body = await req.json();
   } catch {
     return json({ error: "invalid JSON body" }, 400, req);
+  }
+
+  if (typeof body.prompt !== "string" || body.prompt.length > MAX_PROMPT_CHARS) {
+    return json({ error: `prompt must be a string of at most ${MAX_PROMPT_CHARS} characters` }, 400, req);
   }
 
   try {
@@ -143,7 +151,7 @@ async function proxyStt(req) {
           content: [
             {
               type: "text",
-              text: `请把这段音频转写为纯文本，只返回转写内容。音频 MIME 类型：${audio.mimeType}。优先按 ${language} 识别。`,
+              text: `请把这段音频转写为纯文本，只返回转写内容。音频 MIME 类型：${audio.mimeType.split(";")[0].trim()}。优先按 ${language} 识别。`,
             },
             {
               type: "input_audio",
@@ -215,8 +223,8 @@ function parseAllowedOrigins() {
 function isOriginAllowed(origin) {
   if (!origin) return true;
   const configured = parseAllowedOrigins();
-  const allowed = configured.length ? configured : [new URL(origin).origin.replace(/\/$/, "")];
-  return allowed.includes(origin.replace(/\/$/, ""));
+  if (!configured.length) return false;
+  return configured.includes(origin.replace(/\/$/, ""));
 }
 
 function corsHeaders(req) {
@@ -230,77 +238,6 @@ function corsHeaders(req) {
     headers["Access-Control-Allow-Origin"] = origin;
   }
   return headers;
-}
-
-function buildUpstreamUrl(baseUrl, path) {
-  const base = String(baseUrl || DEFAULT_BASE_URL).replace(/\/$/, "");
-  if (base.endsWith("/v1") && path.startsWith("/v1/")) {
-    return `${base}${path.slice(3)}`;
-  }
-  return `${base}${path}`;
-}
-
-function parseAudioDataUrl(dataUrl) {
-  if (!dataUrl.startsWith("data:")) throw new Error("audioData must be a data URL");
-  const commaIndex = dataUrl.indexOf(",");
-  if (commaIndex < 0) throw new Error("audioData is missing base64 data");
-  const header = dataUrl.slice(5, commaIndex);
-  const data = dataUrl.slice(commaIndex + 1);
-  const parts = header.split(";").map((part) => part.trim().toLowerCase()).filter(Boolean);
-  const mimeType = parts[0] || "";
-  if (!mimeType.startsWith("audio/")) throw new Error("audioData must be an audio data URL");
-  if (!parts.slice(1).includes("base64")) throw new Error("audioData must be base64 encoded");
-  if (!data) throw new Error("audioData is empty");
-
-  const byteLength = Math.floor((data.length * 3) / 4) - (data.endsWith("==") ? 2 : data.endsWith("=") ? 1 : 0);
-  const subtype = mimeType.split("/")[1].split("+")[0];
-  const formatMap = {
-    mpeg: "mp3",
-    mp3: "mp3",
-    wav: "wav",
-    "x-wav": "wav",
-    wave: "wav",
-    webm: "webm",
-    ogg: "ogg",
-    mp4: "mp4",
-    m4a: "m4a",
-  };
-  return { mimeType, format: formatMap[subtype] || subtype, data, byteLength };
-}
-
-function cleanText(value) {
-  if (typeof value === "string") return value.trim();
-  if (Array.isArray(value)) return value.map(cleanText).filter(Boolean).join("\n").trim();
-  if (value && typeof value === "object") {
-    return cleanText(value.text) || cleanText(value.transcript) || cleanText(value.content) || cleanText(value.reasoning_content);
-  }
-  return "";
-}
-
-function extractTranscript(data) {
-  const direct = cleanText(data?.text) || cleanText(data?.transcript) || cleanText(data?.output_text);
-  if (direct) return direct;
-  if (Array.isArray(data?.choices)) {
-    for (const choice of data.choices) {
-      const content = choice?.message?.content;
-      if (typeof content === "string") { const t = content.trim(); if (t) return t; }
-      if (Array.isArray(content)) {
-        for (const part of content) {
-          const t = cleanText(part?.text) || cleanText(part?.transcript);
-          if (t) return t;
-        }
-      }
-      const rc = cleanText(choice?.message?.reasoning_content);
-      if (rc) return rc;
-      const ct = cleanText(choice?.text);
-      if (ct) return ct;
-    }
-  }
-  return cleanText(data?.output);
-}
-
-function normalizeMimoModel(model) {
-  return String(model).toLowerCase() === "mimo-v2-omni" ? "mimo-v2-omni" : model;
 }
 
 function json(payload, status, req) {

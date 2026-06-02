@@ -50,7 +50,7 @@ load_dotenv(ROOT / ".env")
 
 PORT = int(os.environ.get("PORT", "8765"))
 API_KEY = os.environ.get("OPENAI_API_KEY", "").strip()
-BASE_URL = os.environ.get("OPENAI_BASE_URL", "https://www.packyapi.com/v1").rstrip("/")
+BASE_URL = os.environ.get("OPENAI_BASE_URL", "").rstrip("/")
 MODEL = os.environ.get("OPENAI_MODEL", "gpt-image-2").strip() or "gpt-image-2"
 ALLOWED_API_PATHS = {"/v1/images/generations"}
 STT_PATH = "/stt/transcribe"
@@ -58,6 +58,7 @@ MIMO_API_KEY = os.environ.get("MIMO_API_KEY", "").strip()
 MIMO_BASE_URL = os.environ.get("MIMO_BASE_URL", "https://token-plan-cn.xiaomimimo.com/v1").rstrip("/")
 MIMO_MODEL = os.environ.get("MIMO_MODEL", "MiMo-V2-Omni").strip() or "MiMo-V2-Omni"
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_PROMPT_CHARS = 4000
 MAX_STT_BODY_BYTES = MAX_UPLOAD_BYTES * 2
 MAX_AUDIO_BYTES = MAX_UPLOAD_BYTES
 UPSTREAM_TIMEOUT_SECONDS = 300
@@ -85,14 +86,14 @@ def is_origin_allowed(origin: str | None, allowed: set[str] | None = None) -> bo
     return origin.rstrip("/") in (allowed or ALLOWED_ORIGINS)
 
 
-def build_upstream_url(base_url: str, path: str) -> str:
+def build_upstream_url(base_url: str, path: str) -> str:  # CQ-09 sync: shared/utils.js#buildUpstreamUrl
     base = base_url.rstrip("/")
     if base.endswith("/v1") and path.startswith("/v1/"):
         return base + path[3:]
     return base + path
 
 
-def parse_audio_data_url(data_url: str) -> tuple[str, str, bytes]:
+def parse_audio_data_url(data_url: str) -> tuple[str, str, bytes]:  # CQ-09 sync: shared/utils.js#parseAudioDataUrl
     if not isinstance(data_url, str) or not data_url.startswith("data:"):
         raise ValueError("audioData must be a data URL")
     try:
@@ -104,6 +105,13 @@ def parse_audio_data_url(data_url: str) -> tuple[str, str, bytes]:
     mime_type = parts[0] if parts else ""
     if not mime_type.startswith("audio/"):
         raise ValueError("audioData must be an audio data URL")
+    allowed_audio_types = {
+        "audio/mpeg", "audio/mp3", "audio/wav", "audio/x-wav", "audio/wave",
+        "audio/webm", "audio/ogg", "audio/mp4", "audio/x-m4a", "audio/m4a",
+        "audio/aac", "audio/flac", "audio/x-flac", "audio/opus",
+    }
+    if mime_type not in allowed_audio_types:
+        raise ValueError(f"unsupported audio MIME type: {mime_type}")
     if "base64" not in parts[1:]:
         raise ValueError("audioData must be base64 encoded")
 
@@ -129,7 +137,7 @@ def parse_audio_data_url(data_url: str) -> tuple[str, str, bytes]:
     return mime_type, audio_format, audio_bytes
 
 
-def _clean_text(value: object) -> str:
+def _clean_text(value: object) -> str:  # CQ-09 sync: shared/utils.js#cleanText
     if isinstance(value, str):
         return value.strip()
     if isinstance(value, list):
@@ -147,7 +155,7 @@ def _clean_text(value: object) -> str:
     return ""
 
 
-def extract_transcript(data: dict) -> str:
+def extract_transcript(data: dict) -> str:  # CQ-09 sync: shared/utils.js#extractTranscript
     for key in ("text", "transcript", "output_text"):
         text = _clean_text(data.get(key))
         if text:
@@ -174,7 +182,7 @@ def extract_transcript(data: dict) -> str:
     return ""
 
 
-def normalize_mimo_model(model: str) -> str:
+def normalize_mimo_model(model: str) -> str:  # CQ-09 sync: shared/utils.js#normalizeMimoModel
     if model.lower() == "mimo-v2-omni":
         return "mimo-v2-omni"
     return model
@@ -295,6 +303,17 @@ class Handler(SimpleHTTPRequestHandler):
             return
 
         body = self.rfile.read(content_length) if content_length else b""
+        try:
+            payload = json.loads(body.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            self._write_json(HTTPStatus.BAD_REQUEST, {"error": "invalid JSON body"})
+            return
+
+        prompt = payload.get("prompt")
+        if not isinstance(prompt, str) or len(prompt) > MAX_PROMPT_CHARS:
+            self._write_json(HTTPStatus.BAD_REQUEST, {"error": f"prompt must be a string of at most {MAX_PROMPT_CHARS} characters"})
+            return
+
         upstream_url = build_upstream_url(BASE_URL, path)
         req = urllib.request.Request(
             upstream_url,
@@ -358,9 +377,10 @@ class Handler(SimpleHTTPRequestHandler):
         if language not in ALLOWED_LANGS:
             self._write_json(HTTPStatus.BAD_REQUEST, {"error": "unsupported language code"})
             return
+        safe_mime = mime_type.split(";")[0].strip()
         prompt = (
             "请把这段音频转写为纯文本，只返回转写内容。"
-            f"音频 MIME 类型：{mime_type}。优先按 {language} 识别。"
+            f"音频 MIME 类型：{safe_mime}。优先按 {language} 识别。"
         )
         upstream_payload = {
             "model": normalize_mimo_model(MIMO_MODEL),
@@ -399,6 +419,7 @@ class Handler(SimpleHTTPRequestHandler):
         except Exception as err:
             sys.stderr.write(f"[serve] mimo proxy error: {err}\n")
             self._write_json(HTTPStatus.BAD_GATEWAY, {"error": "upstream STT request failed"})
+
 
 class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
     daemon_threads = True
