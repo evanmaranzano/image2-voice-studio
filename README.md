@@ -5,7 +5,7 @@
 ## 功能
 
 - **文生图**：输入文字描述，AI 生成图片（支持 3:2 / 1:1 / 2:3 / 16:9 四种比例）
-- **语音输入**：Chrome/Edge Web Speech API 实时语音识别，或 MiMo-V2-Omni 录音转写备选
+- **语音输入**：Chrome/Edge Web Speech API 实时语音识别
 - **拼音虚拟键盘**：内置中文拼音输入法（开发/调试用）
 - **预设示例**：一键填入预设提示词，快速体验
 - **展厅模式**：URL 加 `?exhibit` 启用，自动隐藏高级选项、锁定配置、60 秒自动重置
@@ -26,14 +26,6 @@ python serve.py
 
 打开 `http://127.0.0.1:8765/?exhibit` 即可使用。
 
-MiMo 语音转写（可选）：
-
-```powershell
-$env:MIMO_API_KEY = "tp-..."
-$env:MIMO_BASE_URL = "https://token-plan-cn.xiaomimimo.com/v1"
-$env:MIMO_MODEL = "MiMo-V2-Omni"
-```
-
 ### Netlify 部署
 
 ```powershell
@@ -41,9 +33,6 @@ $env:MIMO_MODEL = "MiMo-V2-Omni"
 npx netlify env:set OPENAI_API_KEY "sk-..."
 npx netlify env:set OPENAI_BASE_URL "https://api.change2pro.com"
 npx netlify env:set OPENAI_MODEL "gpt-image-2"
-npx netlify env:set MIMO_API_KEY "tp-..."
-npx netlify env:set MIMO_BASE_URL "https://token-plan-cn.xiaomimimo.com/v1"
-npx netlify env:set MIMO_MODEL "MiMo-V2-Omni"
 npx netlify env:set ALLOWED_ORIGINS "https://your-site.netlify.app"
 
 # 部署（必须 --no-build）
@@ -86,9 +75,8 @@ python -m unittest discover -s tests -p "test_*.py"
 ## 安全
 
 - API Key 仅存储在环境变量中，不落地到前端或仓库
-- 路径白名单：仅开放 `/v1/images/generations` 和 `/stt/transcribe`
-- 请求体大小限制 10MB（STT 20MB）
-- `lang` 参数白名单校验（防 prompt 注入）
+- 路径白名单：仅开放 `/v1/images/generations`
+- 请求体大小限制 10MB
 - 返回的图片 URL 校验 scheme（仅允许 https/http/data:image）
 - 上游错误信息脱敏，不泄露内部细节
 - CORS 空配置时回退为只允许请求自身 origin
@@ -100,7 +88,7 @@ python -m unittest discover -s tests -p "test_*.py"
 - **本地代理**：Python 标准库 `http.server` + `urllib`
 - **Netlify**：Netlify Functions (ES Module)
 - **Worker**：Cloudflare Workers
-- **AI 服务**：OpenAI Images API（兼容中转站）+ MiMo-V2-Omni（语音转写）
+- **AI 服务**：OpenAI Images API（兼容中转站）
 
 ## License
 

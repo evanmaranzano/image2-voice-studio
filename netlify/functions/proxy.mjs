@@ -1,16 +1,10 @@
 const DEFAULT_BASE_URL = "";
 const DEFAULT_MODEL = "gpt-image-2";
-const DEFAULT_MIMO_BASE_URL = "https://token-plan-cn.xiaomimimo.com/v1";
-const DEFAULT_MIMO_MODEL = "MiMo-V2-Omni";
 const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 const MAX_PROMPT_CHARS = 4000;
-const MAX_STT_BODY_BYTES = MAX_UPLOAD_BYTES * 2;
 const IMAGE_PATH = "/v1/images/generations";
-const STT_PATH = "/stt/transcribe";
-const ALLOWED_LANGS = new Set(["zh-CN", "en-US", "ja-JP", "zh-TW", "ko-KR", "fr-FR", "de-DE", "es-ES"]);
 
-// CQ-09: shared pure utilities — keep in sync with serve.py
-import { buildUpstreamUrl, parseAudioDataUrl, cleanText, extractTranscript, normalizeMimoModel } from "../../shared/utils.js";
+import { buildUpstreamUrl } from "../../shared/utils.js";
 
 export default async (req) => {
   const url = new URL(req.url);
@@ -43,15 +37,11 @@ export default async (req) => {
     return proxyImage(req);
   }
 
-  if (req.method === "POST" && (url.pathname === STT_PATH || fallbackRoute === "transcribe")) {
-    return proxyStt(req);
-  }
-
   return json({ error: "not found" }, 404, req);
 };
 
 export const config = {
-  path: ["/config", "/healthz", "/v1/images/generations", "/stt/transcribe"],
+  path: ["/config", "/healthz", "/v1/images/generations"],
   method: ["GET", "POST", "OPTIONS"],
   preferStatic: true,
 };
@@ -101,107 +91,6 @@ async function proxyImage(req) {
   } catch (error) {
     return json({ error: "image proxy failed" }, 502, req);
   }
-}
-
-async function proxyStt(req) {
-  const apiKey = env("MIMO_API_KEY");
-  if (!apiKey) {
-    return json({ error: "MIMO_API_KEY is not configured" }, 503, req);
-  }
-
-  const body = await readBody(req, MAX_STT_BODY_BYTES);
-  if (body.error) {
-    return json({ error: body.error }, body.status, req);
-  }
-
-  let payload;
-  try {
-    payload = JSON.parse(new TextDecoder().decode(body.buffer));
-  } catch {
-    return json({ error: "invalid JSON body" }, 400, req);
-  }
-
-  let audio;
-  try {
-    audio = parseAudioDataUrl(String(payload.audioData || ""));
-  } catch (error) {
-    return json({ error: error.message }, 400, req);
-  }
-
-  if (audio.byteLength > MAX_UPLOAD_BYTES) {
-    return json({ error: "audio is too large" }, 413, req);
-  }
-
-  const language = String(payload.lang || "zh-CN");
-  if (!ALLOWED_LANGS.has(language)) {
-    return json({ error: "unsupported language code" }, 400, req);
-  }
-  const upstream = await fetch(buildUpstreamUrl(env("MIMO_BASE_URL") || DEFAULT_MIMO_BASE_URL, "/v1/chat/completions"), {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-      "User-Agent": "Mozilla/5.0 Image2VoiceStudio/1.0",
-    },
-    body: JSON.stringify({
-      model: normalizeMimoModel(env("MIMO_MODEL") || DEFAULT_MIMO_MODEL),
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: `请把这段音频转写为纯文本，只返回转写内容。音频 MIME 类型：${audio.mimeType.split(";")[0].trim()}。优先按 ${language} 识别。`,
-            },
-            {
-              type: "input_audio",
-              input_audio: { data: payload.audioData, format: audio.format },
-            },
-          ],
-        },
-      ],
-    }),
-  });
-
-  const raw = await upstream.text();
-  if (!upstream.ok) {
-    return new Response(raw || JSON.stringify({ error: `MiMo upstream HTTP ${upstream.status}` }), {
-      status: upstream.status,
-      headers: {
-        ...corsHeaders(req),
-        "Content-Type": upstream.headers.get("content-type") || "application/json; charset=utf-8",
-        "X-Content-Type-Options": "nosniff",
-      },
-    });
-  }
-
-  let data;
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    return json({ error: "MiMo response was not JSON" }, 502, req);
-  }
-
-  const transcript = extractTranscript(data);
-  if (!transcript) {
-    return json({ error: "MiMo response did not contain transcript" }, 502, req);
-  }
-
-  return json({ text: transcript, provider: DEFAULT_MIMO_MODEL }, 200, req);
-}
-
-async function readBody(req, maxBytes) {
-  const contentLength = Number(req.headers.get("content-length") || "0");
-  if (contentLength > maxBytes) {
-    return { error: "request body is too large", status: 413 };
-  }
-
-  const buffer = await req.arrayBuffer();
-  if (buffer.byteLength > maxBytes) {
-    return { error: "request body is too large", status: 413 };
-  }
-
-  return { buffer };
 }
 
 function env(name) {

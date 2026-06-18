@@ -16,3 +16,4 @@ generated_*.webp
 
 .codegraph/
 .cursor/
+conversations.json

@@ -167,7 +167,7 @@ textarea, input, select { font-family: inherit; outline: none; }
 .empty {
   display: flex; flex-direction: column;
   align-items: center; justify-content: center;
-  height: calc(100vh - 64px - 120px);
+  height: calc(100vh - 64px - 220px);
   text-align: center; animation: fadeIn .5s ease;
 }
 .empty h2 {
@@ -183,6 +183,30 @@ textarea, input, select { font-family: inherit; outline: none; }
   transition: all .15s;
 }
 .preset:hover { background: var(--bg-3); color: var(--text); }
+
+/* ── Gallery ── */
+.gallery {
+  display: flex; gap: 12px; overflow: hidden;
+  margin-top: 32px; padding: 4px 0 8px;
+  width: 100%; max-width: 640px;
+}
+.gallery-track {
+  display: flex; gap: 12px;
+  animation: galleryScroll 20s linear infinite;
+}
+.gallery-track:hover { animation-play-state: paused; }
+@keyframes galleryScroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(calc(-50% - 6px)); }
+}
+.gallery-img {
+  flex-shrink: 0; width: 120px; height: 120px;
+  border-radius: 12px; object-fit: cover;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: border-color .2s, transform .2s;
+}
+.gallery-img:hover { border-color: var(--green); transform: scale(1.04); }
 
 /* ── Messages ── */
 .msg { padding: 20px 16px; animation: msgIn .35s ease both; }
@@ -510,9 +534,6 @@ textarea, input, select { font-family: inherit; outline: none; }
       <div class="voice-row">
         <div class="transcript" id="transcript">语音识别结果会显示在这里。</div>
       </div>
-      <div class="voice-row">
-        <button class="tool-btn" id="mimoBtn" type="button">MiMo 录音转写</button>
-      </div>
     </div>
 
     <!-- Keyboard Panel -->
@@ -567,9 +588,6 @@ const pendingGens = new Map(); // convId -> { prompt, intervalId }
 let recognition = null;
 let listening = false;
 let pinyinBuffer = "";
-let mediaRecorder = null;
-let isMimoRecording = false;
-let audioChunks = [];
 let autoResetTimer = null;
 
 const presetTexts = {
@@ -647,7 +665,6 @@ function resolveEndpoint(path) {
   const base = location.origin.replace(/\/$/, "");
   if (/\/\.netlify\/functions\/proxy$/i.test(location.href)) {
     if (path === "/v1/images/generations") return `${base}?route=generate`;
-    if (path === "/stt/transcribe") return `${base}?route=transcribe`;
     if (path === "/config") return `${base}?route=config`;
   }
   return base + path;
@@ -896,49 +913,6 @@ _q("#micBtn").onclick = () => {
   if (listening) recognition.stop(); else recognition.start();
 };
 
-// ── MiMo ──
-async function transcribeMimo(blob) {
-  const reader = new FileReader();
-  const dataUrl = await new Promise((res, rej) => { reader.onload = () => res(reader.result); reader.onerror = rej; reader.readAsDataURL(blob); });
-  const r = await fetch(resolveEndpoint("/stt/transcribe"), {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ audioData: dataUrl, lang: _q("#voiceLang").value }),
-  });
-  if (!r.ok) throw new Error("转写失败");
-  const d = await r.json();
-  const t = String(d.text || "").trim();
-  if (!t) throw new Error("未返回内容");
-  return t;
-}
-
-_q("#mimoBtn").onclick = async () => {
-  if (isMimoRecording && mediaRecorder) { mediaRecorder.stop(); return; }
-  if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") { showToast("不支持录音"); return; }
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    audioChunks = [];
-    mediaRecorder = new MediaRecorder(stream);
-    mediaRecorder.ondataavailable = (e) => { if (e.data?.size) audioChunks.push(e.data); };
-    mediaRecorder.onstop = async () => {
-      isMimoRecording = false; _q("#mimoBtn").textContent = "MiMo 录音转写";
-      stream.getTracks().forEach(t => t.stop());
-      const blob = new Blob(audioChunks, { type: mediaRecorder.mimeType || "audio/webm" });
-      if (!blob.size) { showToast("未录到音频"); return; }
-      _q("#transcript").textContent = "转写中...";
-      try {
-        const text = await transcribeMimo(blob);
-        _q("#transcript").textContent = text;
-        const cur = input.value.trim();
-        input.value = cur ? cur + "，" + text : text;
-        autoH(); showToast("转写完成");
-      } catch (e) { _q("#transcript").textContent = "转写失败"; showToast("转写失败"); }
-    };
-    mediaRecorder.start(); isMimoRecording = true;
-    _q("#mimoBtn").textContent = "停止并转写";
-    _q("#transcript").textContent = "录音中...";
-  } catch { showToast("无法启动录音"); }
-};
-
 // ── Panel Toggles ──
 _q("#voiceToggle").onclick = () => {
   const vp = _q("#voicePanel"), kp = _q("#kbPanel"), vt = _q("#voiceToggle"), kt = _q("#kbToggle");
@@ -1021,14 +995,15 @@ async function loadConversations() {
       const remote = await r.json();
       if (Array.isArray(remote) && remote.length) {
         conversations = remote;
-        localStorage.setItem("image2_conversations", JSON.stringify(conversations));
+        try { localStorage.setItem("image2_conversations", JSON.stringify(_sanitizeForStorage(conversations))); }
+        catch (e) { console.warn("[storage] failed to cache remote data", e); }
         return;
       }
     }
   } catch (e) {
     console.warn("[sync] loadConversations: remote fetch failed", e);
   }
-  // remote empty or unreachable: use local, and push to remote
+  // remote empty or unreachable: use local, and push to remote (full data, preserving any non-sanitized fields)
   conversations = local;
   if (local.length) {
     fetch("/.netlify/functions/conversations", {
@@ -1055,14 +1030,30 @@ function _convHeaders() {
 }
 
 let _saveConvTimer = null;
+function _sanitizeForStorage(convos) {
+  return convos.map(c => ({
+    ...c,
+    messages: (c.messages || []).map(m => {
+      if (m.type === "image" && typeof m.url === "string" && m.url.startsWith("data:")) {
+        return { ...m, url: "" }; // base64 too large for localStorage
+      }
+      return m;
+    }),
+  }));
+}
 function saveConversations() {
-  localStorage.setItem("image2_conversations", JSON.stringify(conversations));
+  try {
+    localStorage.setItem("image2_conversations", JSON.stringify(_sanitizeForStorage(conversations)));
+  } catch (e) {
+    console.warn("[storage] localStorage write failed, clearing old data", e);
+    try { localStorage.removeItem("image2_conversations"); } catch {}
+  }
   clearTimeout(_saveConvTimer);
   _saveConvTimer = setTimeout(() => {
     fetch("/.netlify/functions/conversations", {
       method: "POST",
       headers: _convHeaders(),
-      body: JSON.stringify(conversations),
+      body: JSON.stringify(conversations), // send full data (including base64 images) to remote
     }).then(r => {
       if (r.ok) setSyncStatus("ok");
       else { console.warn("[sync] saveConversations: remote POST failed, status", r.status); setSyncStatus("fail"); }
@@ -1151,7 +1142,39 @@ function recordMessage(type, payload, targetConvId) {
 }
 
 function buildEmptyHTML() {
-  return '<div class="empty" id="emptyState"><h2>用文字生成图片</h2><p>描述你想生成的画面，AI 会帮你画出来。</p><div class="presets"><button class="preset">星空下的城市</button><button class="preset">可爱的机器猫</button><button class="preset">赛博朋克少女</button><button class="preset">水墨山水画</button><button class="preset">未来城市夜景</button></div></div>';
+  return '<div class="empty" id="emptyState"><h2>用文字生成图片</h2><p>描述你想生成的画面，AI 会帮你画出来。</p><div class="presets"><button class="preset">星空下的城市</button><button class="preset">可爱的机器猫</button><button class="preset">赛博朋克少女</button><button class="preset">水墨山水画</button><button class="preset">未来城市夜景</button></div><div class="gallery" id="gallery"></div></div>';
+}
+
+function populateGallery() {
+  const g = _q("#gallery");
+  if (!g || g.children.length) return;
+  const imgs = [];
+  const seen = new Set();
+  conversations.forEach(c => {
+    (c.messages || []).forEach(m => {
+      if (m.type === "image" && m.url && !seen.has(m.url)) {
+        seen.add(m.url);
+        const img = document.createElement("img");
+        img.className = "gallery-img";
+        img.src = m.url;
+        img.alt = c.title || "样例";
+        img.title = c.title || "";
+        img.onclick = () => {
+          createConversation();
+          const input = _q("#promptInput");
+          input.value = c.title || c.lastUserText || "";
+          input.dispatchEvent(new Event("input"));
+        };
+        imgs.push(img);
+      }
+    });
+  });
+  if (!imgs.length) return;
+  const track = document.createElement("div");
+  track.className = "gallery-track";
+  imgs.forEach(el => track.appendChild(el.cloneNode(true)));
+  imgs.forEach(el => track.appendChild(el.cloneNode(true)));
+  g.appendChild(track);
 }
 
 function renderConvToDOM() {
@@ -1166,11 +1189,12 @@ function renderConvToDOM() {
     if (!cur.messages.length) { conv.innerHTML = buildEmptyHTML(); }
     else { cur.messages.forEach(m => {
       if (m.type === "user") addUserMsg(m.text || "", false);
-      else if (m.type === "image") addResult(m.url || "", false);
+      else if (m.type === "image" && m.url) addResult(m.url, false);
       else if (m.type === "error") addErr(m.text || "", false);
     }); }
   } else { conv.innerHTML = buildEmptyHTML(); }
   bindPresets();
+  populateGallery();
   // Clear any stale generating interval before clearing DOM
   for (const [cid, gen] of pendingGens) {
     if (gen.intervalId) { clearInterval(gen.intervalId); gen.intervalId = null; }
